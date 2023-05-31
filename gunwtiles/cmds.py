@@ -65,11 +65,9 @@ def query_asfgunw(geom, year, month, username, password, debug=False):
     """
 
     basedir = f"/tmp"
-    cfg_file = f"{basedir}/cfg_{np.random.randint(1000000):08d}"
+    cfg_file = f"{basedir}/cfg_{np.random.randint(1000000000):11d}"
     with open(cfg_file, "w") as f:
         f.write(s)
-
-
 
     script = str(os.path.dirname(__file__))+"/sentinel_query_download/sentinel_query_download.py"    
 
