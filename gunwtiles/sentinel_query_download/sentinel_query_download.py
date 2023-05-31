@@ -17,6 +17,7 @@ import configparser,argparse,requests,csv,subprocess,time,os
 #optional use urllib instead of wget
 #from urllib.request import urlopen
 import multiprocessing as mp
+import numpy as np
 
 # hard-coded ASF query URL:
 asf_baseurl='https://api.daac.asf.alaska.edu/services/search/param?'
@@ -109,7 +110,7 @@ if __name__ == '__main__':
         rows=list(reader)
     
     # save the results to a file
-    logtime=time.strftime("%Y_%m_%d-%H_%M_%S")
+    logtime=time.strftime("%Y_%m_%d-%H_%M_%S")+str(np.random.randint(10000000))
     query_log='asf_query_%s.%s'%(logtime,output_format)
     with open(query_log,'w')as f:
         print('Query result saved to asf_query_%s.%s'%(logtime,output_format))

@@ -7,7 +7,7 @@ setup(name='gunwtiles',
                         'progressbar2', 'psutil', 'scipy', 'shapely',
                         'geopandas', 'pyproj', 'rasterio', 'retry', 
                         'earthengine-api', 'alphashape', 'rlxutils',
-                        'xarray', 'netcdf4', 'beautifulsoup4'
+                        'xarray', 'netcdf4', 'beautifulsoup4', 'lxml'
                        ],
       use_scm_version=True,
       setup_requires=['setuptools_scm'],
