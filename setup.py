@@ -6,7 +6,8 @@ setup(name='gunwtiles',
       install_requires=['matplotlib','numpy', 'pandas','joblib',
                         'progressbar2', 'psutil', 'scipy', 'shapely',
                         'geopandas', 'pyproj', 'rasterio', 'retry', 
-                        'earthengine-api', 'alphashape', 'rlxutils'
+                        'earthengine-api', 'alphashape', 'rlxutils',
+                        'xarray', 'netcdf4'
                        ],
       use_scm_version=True,
       setup_requires=['setuptools_scm'],
