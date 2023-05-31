@@ -18,6 +18,8 @@ import xarray as xr
 from skimage.transform import resize
 from pathlib import Path
 from glob import glob
+from bs4 import BeautifulSoup
+from time import sleep
 
 def gethash(s):
     """
@@ -27,7 +29,7 @@ def gethash(s):
     k = str(hex(k))[2:].zfill(13)
     return k
 
-def query_asfgunw(geom, year, month, username, password):
+def query_asfgunw(geom, year, month, username, password, debug=False):
     
     """
     queries asf gunw collection for all the pairs whose end date is within year/month, containing the given geometry
@@ -35,7 +37,8 @@ def query_asfgunw(geom, year, month, username, password):
     geom: a shapely geometry in WSG84 lon lat degrees
     year, month: the year/month of the pairs end date
     
-    retuns: a geopandas dataframe
+    retuns: a geopandas dataframe if sucessful
+            a string with error message otherwise
     """
     
     lastday_in_month = calendar.monthrange(year, month)[1]
@@ -67,27 +70,61 @@ def query_asfgunw(geom, year, month, username, password):
         f.write(s)
 
 
-    # query ASF through a command
 
     script = str(os.path.dirname(__file__))+"/sentinel_query_download/sentinel_query_download.py"    
-    cmd = Command(f'python {script} {cfg_file} ', 
-                  cwd = f'{basedir}')
-    cmd.run().wait()
-    s = cmd.stdout()
-    query_log = re.search(r'asf_query_(.*)\.csv', s)
-    os.remove(cfg_file)
-    if query_log is None:
-        return None
-    
-    query_log = query_log.group(0)
-    qfile = f"{basedir}/{query_log}"
-    z = pd.read_csv(qfile)
+
+    attempts = 1
+    retry = True
+    while retry:
+        # query ASF through a command
+        cmd = Command(f'python {script} {cfg_file} ', 
+                    cwd = f'{basedir}')
+        if debug:
+            print ("cmd is", cmd.cmd)
+        cmd.run().wait()
+        s = cmd.stdout()
+
+        # parse the output to retrieve the filename with the results
+        query_log = re.search(r'asf_query_(.*)\.csv', s)
+        os.remove(cfg_file)
+        if debug:
+            print ("cmd status", cmd.exitcode())
+            print ("\n\ncmd stdout\n", cmd.stdout())
+            print ("\n\ncmd stderr\n", cmd.stderr())
+        if query_log is None:
+            return "ASFQUERY_NO_LOG"
+        
+        # load the results
+        query_log = query_log.group(0)
+        qfile = f"{basedir}/{query_log}"
+        if debug:
+            print ("query result", qfile)
+        z = pd.read_csv(qfile)
+
+        # this signals an error condition as an HTML in the HTTP response
+        if '<html>' in z.columns:
+            with open(qfile) as f:
+                html = f.read()
+                
+            from bs4 import BeautifulSoup
+            msg = BeautifulSoup(html, 'lxml').find('body').get_text().strip()    
+            if "Time-out" in msg and attempts<4:
+                print (f"ASF time out at attempt {attempts}, sleeping 10s")
+                sleep(10)
+                attempts += 1
+                continue
+
+            return f'ASFQUERY_ERROR {msg}'
+
+        retry = False
+
     # in case no results
     if len(z)==0:
-        return None
+        return "ASFQUERY_NO_RESULTS"
     
+    # in case other output format
     if not 'Granule Name' in z.columns:
-        return None
+        return "ASFQUERY_INCORRECT_FORMAT"
     
     # add date pair info
     z['Date Pair'] = [i[6] for i in z['Granule Name'].str.split("-")]
@@ -117,8 +154,6 @@ def query_asfgunw(geom, year, month, username, password):
     z = gpd.GeoDataFrame(z, crs=CRS.from_epsg(4326))    
 
     return z
-
-
 
 def select_starttime_most_frequent(zz, direction):
     if not direction in ['asc', 'desc']:
@@ -281,7 +316,7 @@ def tiles2granules( tiles_file,
                                                 username=username, 
                                                 password=password )
 
-    print ("downloading tiles", flush=True)
+    print (f"downloading {len(g)} tiles", flush=True)
     
     mParallel(n_jobs=n_jobs, verbose=30)(
                     delayed(tiles2granules_job)( 
@@ -351,8 +386,13 @@ def tiles2granules_job( chip,
     # are the bounding boxes of the granules and not the granules themselves.
     # caching in GUNWGranule.download will allow to reuse previous downloads in new chips
     if not np.alltrue([ gw.get_boundary().contains(tile) for gw in granules]):
-        print (f"doing ASF query specific for tile {chip.identifier}")
+        print (f"doing ASF query for tile {chip.identifier}")
         tile_granules = query_asfgunw(tile, year=year, month=month, username=username, password=password)
+        if isinstance(tile_granules, str):
+            # this signals an error condition
+            touch(skipped_file, tile_granules)
+            return
+
         if tile_granules is not None and len(tile_granules)>0:
             tile_granules = select_starttime_most_frequent_any_direction(tile_granules)
             # download again
