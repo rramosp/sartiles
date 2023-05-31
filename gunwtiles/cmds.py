@@ -313,6 +313,12 @@ def tiles2granules( tiles_file,
                                                 month=month, 
                                                 username=username, 
                                                 password=password )
+        
+        if isinstance(global_asf_query_result, str):
+            # this signals an error condition
+            print (f"error making global query", global_asf_query_result)
+            return
+
 
     print (f"downloading {len(g)} tiles", flush=True)
     
