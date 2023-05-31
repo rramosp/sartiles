@@ -89,7 +89,11 @@ def query_asfgunw(geom, year, month, username, password, debug=False):
             print ("cmd status", cmd.exitcode())
             print ("\n\ncmd stdout\n", cmd.stdout())
             print ("\n\ncmd stderr\n", cmd.stderr())
+
         if query_log is None:
+            print ("cmd status", cmd.exitcode())
+            print ("\n\ncmd stdout\n", cmd.stdout())
+            print ("\n\ncmd stderr\n", cmd.stderr())
             return "ASFQUERY_NO_LOG"
         
         # load the results
