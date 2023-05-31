@@ -13,7 +13,7 @@ setup(name='gunwtiles',
       scripts=[],
       entry_points={
             "console_scripts": [
-                  "geet = gunwtiles.main:main",
+                  "gunwt = gunwtiles.main:main",
             ],      
       },
       packages=['gunwtiles'],
