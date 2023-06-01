@@ -307,7 +307,8 @@ def tiles2granules( tiles_file,
                         username                 = username, 
                         password                 = password,
                         no_retry                 = no_retry)
-                     for _,chip in g.sample(len(g)).iterrows()
+                     for _,chip in g.iloc[:1].iterrows()
+                     #for _,chip in g.sample(len(g)).iterrows()
             ) 
 
     
@@ -328,7 +329,6 @@ def tiles2granules_job( chip,
     tile = chip.geometry
     dest_file = f"{tiles_folder}/{chip.identifier}.nc"
     skipped_file = f"{tiles_folder}/{chip.identifier}.skipped"
-        
     # if already processed, skip
     if os.path.isfile(dest_file):
         return
@@ -386,7 +386,7 @@ def tiles2granules_job( chip,
             return
 
     """
-         
+
     # retrieve  patches from all granules 
     patches = []
     skip_tile = False
@@ -411,7 +411,7 @@ def tiles2granules_job( chip,
     # resizing them if necessary
     p = patches[0]
     vars2d = [v for v in p.variables if len(p[v].coords)==2]    
-    patch_shape = patches[0][vars2d[0]].values.shape
+    patch_shape = p[vars2d[0]].values.shape
     vars2d_data = {v: np.r_[[resize(patch[v], patch_shape, preserve_range=True) for patch in patches]] for v in vars2d}
 
     # if there is any nan, skip
@@ -421,15 +421,16 @@ def tiles2granules_job( chip,
 
 
     for v in vars2d:
-        if len(np.unique([" ".join(p[v].dims) for p in patches])) != 1:
+        if len(np.unique([" ".join(patch[v].dims) for patch in patches])) != 1:
             raise ValueError(f"lonlat coords in variable {v} are not in the same order in all patches")
 
             
-    r = patches[0].copy()
+    r = p.copy()
     r = r.expand_dims(dim = {"datepair": list(tile_granules['Date Pair'].values)}, axis=0).copy()
     for v in vars2d:
         r[v] = (('datepair', *p[v].dims), vars2d_data[v] )
     
+    r['crs'] = p.crs
     r.to_netcdf(dest_file)
     r.close()
 
