@@ -363,6 +363,7 @@ def tiles2granules_job( chip,
     # check the chip is actualy contained, as the geometries of the global query
     # are the bounding boxes of the granules and not the granules themselves.
     # caching in GUNWGranule.download will allow to reuse previous downloads in new chips
+    """
     if not np.alltrue([ gw.get_boundary().contains(tile) for gw in granules]):
         print (f"doing ASF query for tile {chip.identifier}")
         tile_granules = query_asfgunw(tile, year=year, month=month, username=username, password=password)
@@ -384,7 +385,8 @@ def tiles2granules_job( chip,
             touch(skipped_file, 'TILE_NOT_CONTAINED_IN_GLOBAL_QUERY')
             return
 
-            
+    """
+         
     # retrieve  patches from all granules 
     patches = []
     skip_tile = False
