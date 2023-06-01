@@ -20,6 +20,9 @@ from pathlib import Path
 from glob import glob
 from bs4 import BeautifulSoup
 from time import sleep
+import requests
+import csv
+from bs4 import BeautifulSoup
 
 def gethash(s):
     """
@@ -41,77 +44,42 @@ def query_asfgunw(geom, year, month, username, password, debug=False):
             a string with error message otherwise
     """
     
+    asf_baseurl='https://api.daac.asf.alaska.edu/services/search/param?'
+
     lastday_in_month = calendar.monthrange(year, month)[1]
     start_date = f"{year:4d}-{month:02d}-01"
     end_date   = f"{year:4d}-{month:02d}-{lastday_in_month:02d}"
     
     p = geom.wkt
 
-    s = f"""
-    [api_search]
-    output = csv
-    processingLevel = GUNW_STD
-    intersectsWith = {p}
-    start = {start_date}T00:00:00UTC
-    end = {end_date}T00:00:00UTC
-
-    [download]
-    download_site = both
-    nproc = 2
-
-    [asf_download]
-    http-user = {username}
-    http-password = {password}
-    """
-
-    basedir = f"/tmp"
-    cfg_file = f"{basedir}/xcfg_{np.random.randint(1000000000):011d}"
-    with open(cfg_file, "w") as f:
-        f.write(s)
-
-    script = str(os.path.dirname(__file__))+"/sentinel_query_download/sentinel_query_download.py"    
-
     attempts = 1
     retry = True
     while retry:
-        # query ASF through a command
-        cmd = Command(f'python {script} {cfg_file} ', 
-                    cwd = f'{basedir}')
-        if debug:
-            print ("cmd is", cmd.cmd)
-        cmd.run().wait()
-        s = cmd.stdout()
 
-        # parse the output to retrieve the filename with the results
-        query_log = re.search(r'asf_query_(.*)\.csv', s)
-        if os.path.isfile(cfg_file):
-            os.remove(cfg_file)
-        if debug:
-            print ("cmd status", cmd.exitcode())
-            print ("\n\ncmd stdout\n", cmd.stdout())
-            print ("\n\ncmd stderr\n", cmd.stderr())
+        # make http request
+        conf = dict(
+            output = 'csv',
+            processingLevel = 'GUNW_STD',
+            intersectsWith = p,
+            start = f'{start_date}T00:00:00UTC',
+            end = f'{end_date}T23:59:59UTC'
+        )
 
-        if query_log is None:
-            print ("cmd", cmd.cmd)
-            print ("cmd status", cmd.exitcode())
-            print ("\n\ncmd stdout\n", cmd.stdout())
-            print ("\n\ncmd stderr\n", cmd.stderr())
-            return "ASFQUERY_NO_LOG"
-        
-        # load the results
-        query_log = query_log.group(0)
-        qfile = f"{basedir}/{query_log}"
-        if debug:
-            print ("query result", qfile)
-        z = pd.read_csv(qfile)
+        arg_str='&'.join('%s=%s'%(k,v) for k,v in conf.items())
+        argurl=asf_baseurl + arg_str
+        r=requests.post(argurl)
+
+        if r.status_code != 200:
+            return f"ASFQUERY_ERROR in HTTP request {r.text}"
+            
+        # parse result into a dataframe
+        reader = csv.DictReader(r.text.splitlines())
+        rows=list(reader)
+        z = pd.DataFrame(rows)
 
         # this signals an error condition as an HTML in the HTTP response
-        if '<html>' in z.columns:
-            with open(qfile) as f:
-                html = f.read()
-                
-            from bs4 import BeautifulSoup
-            msg = BeautifulSoup(html, 'lxml').find('body').get_text().strip()    
+        if '<html>' in z.columns:                
+            msg = BeautifulSoup(rows, 'lxml').find('body').get_text().strip()    
             if "Time-out" in msg and attempts<4:
                 print (f"ASF time out at attempt {attempts}, sleeping 10s")
                 sleep(10)
@@ -146,10 +114,10 @@ def query_asfgunw(geom, year, month, username, password, debug=False):
         
     geoms = []
     for _,i in z.iterrows():
-        p1 = i[[ 'Near Start Lon','Near Start Lat']].values
-        p2 = i[['Far Start Lon', 'Far Start Lat']].values
-        p3 = i[['Near End Lon', 'Near End Lat']].values
-        p4 = i[['Far End Lon', 'Far End Lat']].values
+        p1 = i[[ 'Near Start Lon','Near Start Lat']].values.astype(float)
+        p2 = i[['Far Start Lon', 'Far Start Lat']].values.astype(float)
+        p3 = i[['Near End Lon', 'Near End Lat']].values.astype(float)
+        p4 = i[['Far End Lon', 'Far End Lat']].values.astype(float)
 
         p = sh.geometry.Polygon([p1, p3, p4, p2])
         geoms.append(p)
