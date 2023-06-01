@@ -307,8 +307,7 @@ def tiles2granules( tiles_file,
                         username                 = username, 
                         password                 = password,
                         no_retry                 = no_retry)
-                     for _,chip in g.iloc[:1].iterrows()
-                     #for _,chip in g.sample(len(g)).iterrows()
+                     for _,chip in g.sample(len(g)).iterrows()
             ) 
 
     
