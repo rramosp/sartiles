@@ -84,7 +84,8 @@ def query_asfgunw(geom, year, month, username, password, debug=False):
 
         # parse the output to retrieve the filename with the results
         query_log = re.search(r'asf_query_(.*)\.csv', s)
-        os.remove(cfg_file)
+        if os.path.isfile(cfg_file):
+            os.remove(cfg_file)
         if debug:
             print ("cmd status", cmd.exitcode())
             print ("\n\ncmd stdout\n", cmd.stdout())
