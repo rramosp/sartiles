@@ -375,22 +375,48 @@ def tiles2granules_job( chip,
             else:
                 return # dont do anything, no retry
 
-    # find in global query
+    # find in global query. this query is made by ASF using the bounding box
+    # of the granule, so it might not necesarily contain the tile. The loop below ensures that.
     zz = z[[i.contains(tile) for i in z.geometry]]
-    print ("xx query relevant results", zz.shape)
-    tile_granules = select_starttime_most_frequent_any_direction(zz)
-    print ("xx query tile granules", tile_granules.shape)
     
-    # if not found skip it
-    if tile_granules is None or len(tile_granules)==0:
-        touch(skipped_file, 'NO_GRANULES_FOUND')
-        return
     
-    # download granules
-    try:
-        granules = download_granules(tile_granules, granules_download_folder, username, password)
-    except:
-        touch(skipped_file, 'COULD_NOT_DOWNLOAD')
+    while (len(zz)>0):
+
+        tile_granules = select_starttime_most_frequent_any_direction(zz)
+
+        # if not found skip it
+        if tile_granules is None or len(tile_granules)==0:
+            touch(skipped_file, 'NO_GRANULES_FOUND')
+
+        # download granules
+        try:
+            granules = download_granules(tile_granules, granules_download_folder, username, password)
+        except:
+            touch(skipped_file, 'COULD_NOT_DOWNLOAD')
+            return
+
+        # retrieve  patches from all granules 
+        patches = []
+        skip_tile = False
+        boundaries = []
+        for url in tile_granules.URL.values:
+            gw = GUNWGranule(url, cache_folder=granules_download_folder)
+            gw.download(username=username, password=password)
+            # we only consider granules that contain 100% the tile, since otherwise would require
+            # collating patches from different granules with the same exact datepair, etc.
+            boundaries.append(gw.get_boundary())
+            if gw.get_boundary().contains(tile):
+                pp = gw.get_chip(chip.identifier, chip.geometry)
+                patches.append(pp)
+                
+        if len(patches)==0:
+            # if tile is not contained in any selected granule, continue looking
+            zz = zz[~zz['Granule Name'].isin(tile_granules['Granule Name'])]
+        else:
+            break    
+        
+    if len(patches)==0:
+        touch(skipped_file, 'TILE_NOT_FULLY_CONTAINED_IN_ANY_GRANULE')
         return
 
 
@@ -420,23 +446,6 @@ def tiles2granules_job( chip,
             return
 
     """
-
-    # retrieve  patches from all granules 
-    patches = []
-    for url in tile_granules.URL.values:
-        gw = GUNWGranule(url, cache_folder=granules_download_folder)
-        gw.download(username=username, password=password)
-        # we only consider granules that contain 100% the tile, since otherwise would require
-        # collating patches from different granules with the same exact datepair, etc.
-        # note that the get_boundary method returs the actual boundary of the downloaded granule
-        # which is more precise than the square boundary returned by the ASF query.
-        if gw.get_boundary().contains(tile):
-            pp = gw.get_chip(chip.identifier, chip.geometry)
-            patches.append(pp)
-
-    if len(patches)==0:
-        touch(skipped_file, 'TILE_NOT_FULLY_CONTAINED_IN_ANY_GRANULE')
-        return
 
 
     # collate them into a single xarray and save it as NetCDF
