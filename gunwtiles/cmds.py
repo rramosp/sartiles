@@ -241,6 +241,38 @@ class GUNWGranule:
         return patch
 
 
+    def get_chip_meta(self, chip_identifier, chip_geometry): 
+        
+        is_ascending = lambda x: x[-1]>x[0]        
+        
+        xz = xr.open_dataset(self.local_file, 
+                            engine='netcdf4',
+                            group='science/grids/imagingGeometry')
+        
+        tile = chip_geometry
+        tile_coords = np.r_[list(tile.boundary.coords)]
+        minlon, minlat = np.min(tile_coords, axis=0)
+        maxlon, maxlat = np.max(tile_coords, axis=0)        
+        
+        if not len(np.unique(tile_coords[:,0]))==2 or not len(np.unique(tile_coords[:,1]))==2:
+            raise ValueError(f'tile {chip_identifier} must have bounding box coordinates aligned with latitude and longitude')
+
+        if is_ascending(xz.coords['latitudeMeta'].values):
+            lat_range = (minlat, maxlat)
+        else:
+            lat_range = (maxlat, minlat)
+
+        if is_ascending(xz.coords['longitudeMeta'].values):
+            lon_range = (minlon, maxlon)
+        else:
+            lon_range = (maxlon, minlon)
+
+        patch = xz.sel(longitudeMeta=slice(*lon_range), latitudeMeta=slice(*lat_range))        
+        xz.close()
+        return patch
+
+
+
 def touch(filename, content):
     with open(filename, "w") as f:
         f.write(content+"\n")
@@ -329,6 +361,7 @@ def tiles2granules_job( chip,
     dest_file = f"{tiles_folder}/{chip.identifier}.nc"
     skipped_file = f"{tiles_folder}/{chip.identifier}.skipped"
     # if already processed, skip
+    print ("dest file", dest_file)
     if os.path.isfile(dest_file):
         return
         
@@ -344,7 +377,9 @@ def tiles2granules_job( chip,
 
     # find in global query
     zz = z[[i.contains(tile) for i in z.geometry]]
+    print ("xx query relevant results", zz.shape)
     tile_granules = select_starttime_most_frequent_any_direction(zz)
+    print ("xx query tile granules", tile_granules.shape)
     
     # if not found skip it
     if tile_granules is None or len(tile_granules)==0:
@@ -388,21 +423,19 @@ def tiles2granules_job( chip,
 
     # retrieve  patches from all granules 
     patches = []
-    skip_tile = False
     for url in tile_granules.URL.values:
         gw = GUNWGranule(url, cache_folder=granules_download_folder)
         gw.download(username=username, password=password)
-        # we check this again to discard tiles not 100% contained within the granule, since this would require
+        # we only consider granules that contain 100% the tile, since otherwise would require
         # collating patches from different granules with the same exact datepair, etc.
-        if not gw.get_boundary().contains(tile):
-            skip_tile = True
-            break
+        # note that the get_boundary method returs the actual boundary of the downloaded granule
+        # which is more precise than the square boundary returned by the ASF query.
+        if gw.get_boundary().contains(tile):
+            pp = gw.get_chip(chip.identifier, chip.geometry)
+            patches.append(pp)
 
-        pp = gw.get_chip(chip.identifier, chip.geometry)
-        patches.append(pp)
-
-    if skip_tile:
-        touch(skipped_file, 'TILE_NOT_CONTAINED_IN_TILE_SPECIFIC_QUERY')
+    if len(patches)==0:
+        touch(skipped_file, 'TILE_NOT_FULLY_CONTAINED_IN_ANY_GRANULE')
         return
 
 
