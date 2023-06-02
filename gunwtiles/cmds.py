@@ -361,7 +361,7 @@ def tiles2granules_job( chip,
     dest_file = f"{tiles_folder}/{chip.identifier}.nc"
     skipped_file = f"{tiles_folder}/{chip.identifier}.skipped"
     # if already processed, skip
-    print ("dest file", dest_file)
+    #print ("dest file", dest_file)
     if os.path.isfile(dest_file):
         return
         
@@ -379,6 +379,7 @@ def tiles2granules_job( chip,
     # of the granule, so it might not necesarily contain the tile. The loop below ensures that.
     zz = z[[i.contains(tile) for i in z.geometry]]
     
+    patches = []
     
     while (len(zz)>0):
 
