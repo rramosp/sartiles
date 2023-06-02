@@ -398,8 +398,8 @@ def tiles2granules_job( chip,
 
         # retrieve  patches from all granules 
         patches = []
-        skip_tile = False
         boundaries = []
+        urls_used = []
         for url in tile_granules.URL.values:
             gw = GUNWGranule(url, cache_folder=granules_download_folder)
             gw.download(username=username, password=password)
@@ -409,12 +409,15 @@ def tiles2granules_job( chip,
             if gw.get_boundary().contains(tile):
                 pp = gw.get_chip(chip.identifier, chip.geometry)
                 patches.append(pp)
+                urls_used.append(url)
+                
                 
         if len(patches)==0:
             # if tile is not contained in any selected granule, continue looking
             zz = zz[~zz['Granule Name'].isin(tile_granules['Granule Name'])]
         else:
-            break    
+            tile_granules = tile_granules[tile_granules.URL.isin(urls_used)]
+            break 
         
     if len(patches)==0:
         touch(skipped_file, 'TILE_NOT_FULLY_CONTAINED_IN_ANY_GRANULE')
@@ -469,9 +472,12 @@ def tiles2granules_job( chip,
             
     r = p.copy()
     r = r.expand_dims(dim = {"datepair": list(tile_granules['Date Pair'].values)}, axis=0).copy()
-    for v in vars2d:
-        r[v] = (('datepair', *p[v].dims), vars2d_data[v] )
-    
+    try:
+        for v in vars2d:
+            r[v] = (('datepair', *p[v].dims), vars2d_data[v] )
+    except Exception as e:
+
+        raise e
     r['crs'] = p.crs
     r.to_netcdf(dest_file)
     r.close()
