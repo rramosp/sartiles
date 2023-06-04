@@ -165,7 +165,8 @@ class GUNWGranule:
         self.local_file_basename = f"{self.cache_folder}/{self.granule_name}.nc"
         
         self.date_pair = self.granule_name.split("-")[6]
-        self.delta_days = get_delta_days(self.date_pair)        
+        self.delta_days = get_delta_days(self.date_pair)      
+        self.direction = self.granule_name.split("-")[2]  
         
     def download(self, username, password):
                 
@@ -182,7 +183,6 @@ class GUNWGranule:
                 self.local_file = filename
                 break
             except Exception as e:
-                print ("EXCEPTION", e)
                 continue
                 
         if self.local_file is None:
@@ -279,18 +279,14 @@ class GUNWGranule:
         # add other metadata
         patch_extra = xr.Dataset(
             data_vars=dict(
-                deltadays=(["datepair"], [self.delta_days]),
+                deltadays=np.array([self.delta_days], dtype='uint8'),
+                direction=(["datepair"], [self.direction])
             ),
             coords=dict(
                 datepair=patch_metadata.coords['datepair'],
             ),
             attrs=dict(description="calculated metadata."),
         )
-
-
-        #for v in patch_metadata.variables:
-        #    if patch_metadata[v].dtype=='O':
-        #        patch_metadata[v] = patch_metadata[v].astype('str')
 
         return {'data': patch_data, 'geom': patch_geometry, 'meta': patch_metadata, 'extra': patch_extra}
 
@@ -451,8 +447,10 @@ def tiles2granules_job( chip,
     # combine all patches
     rdata = xr.merge([p['data'] for p in patches])
     rgeom = xr.merge([p['geom'] for p in patches])
-    rextra = xr.merge([p['extra'] for p in patches])
     rmeta = xr.merge([p['meta'] for p in patches])
+    rextra = xr.merge([p['extra'] for p in patches])
+
+    print (rextra)
 
     # crs is unique
     rdata['crs'] = patches[0]['data'].crs[0]
@@ -463,7 +461,7 @@ def tiles2granules_job( chip,
     rdata.to_netcdf(dest_file, mode='w', group='/science/grids/data')
     rgeom.to_netcdf(dest_file, mode='a', group='/science/grids/imagingGeometry')
     rmeta.to_netcdf(dest_file, mode='a', group='/science/radarMetaData')
-    rextra.to_netcdf(dest_file, mode='a', group='/science/extraMetaData')
+    rextra.to_netcdf(dest_file, mode='a', group='/science/extraMetaData', encoding={'deltadays': {'dtype':'uint8'}})
     return patches
 
 
