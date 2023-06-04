@@ -172,6 +172,7 @@ class GUNWGranule:
         # to find anyone which has already been downloaded.
         self.local_file = None
         for filename in glob(f"{self.local_file_basename}*"):
+            print (filename)
             try:
                 xz = xr.open_dataset(filename, 
                         engine='netcdf4',
@@ -179,7 +180,8 @@ class GUNWGranule:
                 xz.close()
                 self.local_file = filename
                 break
-            except:
+            except Exception as e:
+                print ("EXCEPTION", e)
                 continue
                 
         if self.local_file is None:
@@ -223,6 +225,7 @@ class GUNWGranule:
         minlon, minlat = np.min(tile_coords, axis=0)
         maxlon, maxlat = np.max(tile_coords, axis=0)        
         
+
         if not len(np.unique(tile_coords[:,0]))==2 or not len(np.unique(tile_coords[:,1]))==2:
             raise ValueError(f'tile {chip_identifier} must have bounding box coordinates alined with latitude and longitude')
 
@@ -236,41 +239,41 @@ class GUNWGranule:
         else:
             lon_range = (maxlon, minlon)
 
-        patch = xz.sel(longitude=slice(*lon_range), latitude=slice(*lat_range))        
+        patch_data = xz.sel(longitude=slice(*lon_range), latitude=slice(*lat_range))    
+        # add a datepair dimension with a single coordinate
+        patch_data = patch_data.expand_dims(dim = {"datepair": [self.date_pair]}, axis=0).copy()
         xz.close()
-        return patch
 
 
-    def get_chip_meta(self, chip_identifier, chip_geometry): 
-        
-        is_ascending = lambda x: x[-1]>x[0]        
-        
+
+        # add imaging geometry mean values for this patch
+        lat = np.mean([maxlat, minlat])
+        lon = np.mean([maxlon, minlon])
+
         xz = xr.open_dataset(self.local_file, 
-                            engine='netcdf4',
-                            group='science/grids/imagingGeometry')
-        
-        tile = chip_geometry
-        tile_coords = np.r_[list(tile.boundary.coords)]
-        minlon, minlat = np.min(tile_coords, axis=0)
-        maxlon, maxlat = np.max(tile_coords, axis=0)        
-        
-        if not len(np.unique(tile_coords[:,0]))==2 or not len(np.unique(tile_coords[:,1]))==2:
-            raise ValueError(f'tile {chip_identifier} must have bounding box coordinates aligned with latitude and longitude')
+                                    engine='netcdf4',
+                                    group='science/grids/imagingGeometry')
+        patch_geometry = xz.sel(longitudeMeta=lon, latitudeMeta=lat, method='nearest')
+        # add a datepair dimension with a single coordinate
+        patch_geometry = patch_geometry.expand_dims(dim = {"datepair": [self.date_pair]}, axis=0).copy()
 
-        if is_ascending(xz.coords['latitudeMeta'].values):
-            lat_range = (minlat, maxlat)
-        else:
-            lat_range = (maxlat, minlat)
-
-        if is_ascending(xz.coords['longitudeMeta'].values):
-            lon_range = (minlon, maxlon)
-        else:
-            lon_range = (maxlon, minlon)
-
-        patch = xz.sel(longitudeMeta=slice(*lon_range), latitudeMeta=slice(*lat_range))        
         xz.close()
-        return patch
 
+        
+
+        # add radar metadata
+        xz = xr.open_dataset(self.local_file, 
+                                    engine='netcdf4',
+                                    group='science/radarMetaData')
+        # add a datepair dimension with a single coordinate
+        patch_metadata = xz.expand_dims(dim = {"datepair": [self.date_pair]}, axis=0).copy()
+        
+        xz.close()
+        for v in patch_metadata.variables:
+            if patch_metadata[v].dtype=='O':
+                patch_metadata[v] = patch_metadata[v].astype('str')
+
+        return {'data': patch_data, 'geom': patch_geometry, 'meta': patch_metadata}
 
 
 def touch(filename, content):
@@ -450,6 +453,20 @@ def tiles2granules_job( chip,
             return
 
     """
+    # combine all patches
+    rdata = xr.merge([p['data'] for p in patches])
+    rgeom = xr.merge([p['geom'] for p in patches])
+    rmeta = xr.merge([p['meta'] for p in patches])
+
+    # crs is unique
+    rdata['crs'] = patches[0]['data'].crs[0]
+    rgeom['crs'] = patches[0]['data'].crs[0]
+    rmeta['crs'] = patches[0]['data'].crs[0]
+
+    rdata.to_netcdf(dest_file, mode='w', group='/science/grids/data')
+    rgeom.to_netcdf(dest_file, mode='a', group='/science/grids/imagingGeometry')
+    rmeta.to_netcdf(dest_file, mode='a', group='/science/radarMetadata')
+    return 
 
 
     # collate them into a single xarray and save it as NetCDF
@@ -464,12 +481,12 @@ def tiles2granules_job( chip,
         touch(skipped_file, 'TILE_WITH_NANS')
         return
 
+    
 
     for v in vars2d:
         if len(np.unique([" ".join(patch[v].dims) for patch in patches])) != 1:
             raise ValueError(f"lonlat coords in variable {v} are not in the same order in all patches")
 
-            
     r = p.copy()
     r = r.expand_dims(dim = {"datepair": list(tile_granules['Date Pair'].values)}, axis=0).copy()
     try:
