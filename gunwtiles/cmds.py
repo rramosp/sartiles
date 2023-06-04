@@ -23,6 +23,7 @@ from time import sleep
 import requests
 import csv
 from bs4 import BeautifulSoup
+import configparser
 
 def gethash(s):
     """
@@ -315,10 +316,17 @@ def tiles2granules( tiles_file,
                     global_asf_query_result = None
                     ):
     if username is None:
-        username =   input("ASF username: ")
-    
-    if password is None:
-        password = getpass.getpass("ASF password: ")
+
+        cfgfile = f"{os.environ['HOME']}/.asf.cfg" 
+        if os.path.isfile(cfgfile):
+            config = configparser.ConfigParser()
+            config.read(cfgfile)
+            username = config['default']['username']
+            password = config['default']['password']
+            print (f"read ASF username/password from {cfgfile}")
+        else:
+            username = input('ASF username')
+            password = getpass.getpass('ASF password')        
 
     if g is None:
         print ("reading tiles file", flush=True)
