@@ -172,7 +172,6 @@ class GUNWGranule:
         # to find anyone which has already been downloaded.
         self.local_file = None
         for filename in glob(f"{self.local_file_basename}*"):
-            print (filename)
             try:
                 xz = xr.open_dataset(filename, 
                         engine='netcdf4',
