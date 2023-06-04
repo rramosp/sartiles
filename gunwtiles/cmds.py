@@ -456,16 +456,16 @@ def tiles2granules_job( chip,
     # combine all patches
     rdata = xr.merge([p['data'] for p in patches])
     rgeom = xr.merge([p['geom'] for p in patches])
-    rmeta = xr.merge([p['meta'] for p in patches])
+    # rmeta = xr.merge([p['meta'] for p in patches])
 
     # crs is unique
     rdata['crs'] = patches[0]['data'].crs[0]
     rgeom['crs'] = patches[0]['data'].crs[0]
-    rmeta['crs'] = patches[0]['data'].crs[0]
+    # rmeta['crs'] = patches[0]['data'].crs[0]
 
     rdata.to_netcdf(dest_file, mode='w', group='/science/grids/data')
     rgeom.to_netcdf(dest_file, mode='a', group='/science/grids/imagingGeometry')
-    rmeta.to_netcdf(dest_file, mode='a', group='/science/radarMetadata')
+    # rmeta.to_netcdf(dest_file, mode='a', group='/science/radarMetadata')
     return 
 
 
