@@ -150,6 +150,11 @@ def select_starttime_most_frequent_any_direction(zz):
         tile_granules = select_starttime_most_frequent(zz, direction='desc')
     return tile_granules
 
+def get_delta_days(date_pair):
+    d0 = datetime.strptime(date_pair.split("_")[0], "%Y%m%d")
+    d1 = datetime.strptime(date_pair.split("_")[1], "%Y%m%d")
+    delta_days = (d0-d1).days        
+    return delta_days
 
 class GUNWGranule:
     
@@ -160,10 +165,7 @@ class GUNWGranule:
         self.local_file_basename = f"{self.cache_folder}/{self.granule_name}.nc"
         
         self.date_pair = self.granule_name.split("-")[6]
-        d0 = datetime.strptime(self.date_pair.split("_")[0], "%Y%m%d")
-        d1 = datetime.strptime(self.date_pair.split("_")[1], "%Y%m%d")
-        self.delta_days = (d0-d1).days        
-        
+        self.delta_days = get_delta_days(self.date_pair)        
         
     def download(self, username, password):
                 
@@ -243,8 +245,6 @@ class GUNWGranule:
         patch_data = patch_data.expand_dims(dim = {"datepair": [self.date_pair]}, axis=0).copy()
         xz.close()
 
-
-
         # add imaging geometry mean values for this patch
         lat = np.mean([maxlat, minlat])
         lon = np.mean([maxlon, minlon])
@@ -264,15 +264,35 @@ class GUNWGranule:
         xz = xr.open_dataset(self.local_file, 
                                     engine='netcdf4',
                                     group='science/radarMetaData')
+        
+        # the matchup dimension seems to be never useds (only presents values
+        # in the first coordinate)
+        for v in xz.variables:
+            if 'matchup' in xz[v].dims:
+                xz[v] = xz[v].values[0]
         # add a datepair dimension with a single coordinate
         patch_metadata = xz.expand_dims(dim = {"datepair": [self.date_pair]}, axis=0).copy()
         
         xz.close()
-        for v in patch_metadata.variables:
-            if patch_metadata[v].dtype=='O':
-                patch_metadata[v] = patch_metadata[v].astype('str')
 
-        return {'data': patch_data, 'geom': patch_geometry, 'meta': patch_metadata}
+
+        # add other metadata
+        patch_extra = xr.Dataset(
+            data_vars=dict(
+                deltadays=(["datepair"], [self.delta_days]),
+            ),
+            coords=dict(
+                datepair=patch_metadata.coords['datepair'],
+            ),
+            attrs=dict(description="calculated metadata."),
+        )
+
+
+        #for v in patch_metadata.variables:
+        #    if patch_metadata[v].dtype=='O':
+        #        patch_metadata[v] = patch_metadata[v].astype('str')
+
+        return {'data': patch_data, 'geom': patch_geometry, 'meta': patch_metadata, 'extra': patch_extra}
 
 
 def touch(filename, content):
@@ -378,7 +398,8 @@ def tiles2granules_job( chip,
                 return # dont do anything, no retry
 
     # find in global query. this query is made by ASF using the bounding box
-    # of the granule, so it might not necesarily contain the tile. The loop below ensures that.
+    # of the granule, so it might not necesarily contain the tile. 
+    # The loop below checks this.
     zz = z[[i.contains(tile) for i in z.geometry]]
     
     patches = []
@@ -402,6 +423,7 @@ def tiles2granules_job( chip,
         patches = []
         boundaries = []
         urls_used = []
+        
         for url in tile_granules.URL.values:
             gw = GUNWGranule(url, cache_folder=granules_download_folder)
             gw.download(username=username, password=password)
@@ -418,6 +440,7 @@ def tiles2granules_job( chip,
             # if tile is not contained in any selected granule, continue looking
             zz = zz[~zz['Granule Name'].isin(tile_granules['Granule Name'])]
         else:
+            # retrict the list of granules to the ones actually used
             tile_granules = tile_granules[tile_granules.URL.isin(urls_used)]
             break 
         
@@ -425,76 +448,22 @@ def tiles2granules_job( chip,
         touch(skipped_file, 'TILE_NOT_FULLY_CONTAINED_IN_ANY_GRANULE')
         return
 
-
-    # check the chip is actualy contained, as the geometries of the global query
-    # are the bounding boxes of the granules and not the granules themselves.
-    # caching in GUNWGranule.download will allow to reuse previous downloads in new chips
-    """
-    if not np.alltrue([ gw.get_boundary().contains(tile) for gw in granules]):
-        print (f"doing ASF query for tile {chip.identifier}")
-        tile_granules = query_asfgunw(tile, year=year, month=month, username=username, password=password)
-        if isinstance(tile_granules, str):
-            # this signals an error condition
-            touch(skipped_file, tile_granules)
-            return
-
-        if tile_granules is not None and len(tile_granules)>0:
-            tile_granules = select_starttime_most_frequent_any_direction(tile_granules)
-            # download again
-            try:
-                granules = download_granules(tile_granules, granules_download_folder, username, password)
-            except Exception as e:
-                touch(skipped_file, 'COULD_NOT_DOWNLOAD')
-                return
-
-        else:
-            touch(skipped_file, 'TILE_NOT_CONTAINED_IN_GLOBAL_QUERY')
-            return
-
-    """
     # combine all patches
     rdata = xr.merge([p['data'] for p in patches])
     rgeom = xr.merge([p['geom'] for p in patches])
-    # rmeta = xr.merge([p['meta'] for p in patches])
+    rextra = xr.merge([p['extra'] for p in patches])
+    rmeta = xr.merge([p['meta'] for p in patches])
 
     # crs is unique
     rdata['crs'] = patches[0]['data'].crs[0]
     rgeom['crs'] = patches[0]['data'].crs[0]
-    # rmeta['crs'] = patches[0]['data'].crs[0]
+    rmeta['crs'] = patches[0]['data'].crs[0]
+    rextra['crs'] = patches[0]['data'].crs[0]
 
     rdata.to_netcdf(dest_file, mode='w', group='/science/grids/data')
     rgeom.to_netcdf(dest_file, mode='a', group='/science/grids/imagingGeometry')
-    # rmeta.to_netcdf(dest_file, mode='a', group='/science/radarMetadata')
-    return 
+    rmeta.to_netcdf(dest_file, mode='a', group='/science/radarMetaData')
+    rextra.to_netcdf(dest_file, mode='a', group='/science/extraMetaData')
+    return patches
 
-
-    # collate them into a single xarray and save it as NetCDF
-    # resizing them if necessary
-    p = patches[0]
-    vars2d = [v for v in p.variables if len(p[v].coords)==2]    
-    patch_shape = p[vars2d[0]].values.shape
-    vars2d_data = {v: np.r_[[resize(patch[v], patch_shape, preserve_range=True) for patch in patches]] for v in vars2d}
-
-    # if there is any nan, skip
-    if sum([np.sum(np.isnan(v)) for k,v in vars2d_data.items()])>0:
-        touch(skipped_file, 'TILE_WITH_NANS')
-        return
-
-    
-
-    for v in vars2d:
-        if len(np.unique([" ".join(patch[v].dims) for patch in patches])) != 1:
-            raise ValueError(f"lonlat coords in variable {v} are not in the same order in all patches")
-
-    r = p.copy()
-    r = r.expand_dims(dim = {"datepair": list(tile_granules['Date Pair'].values)}, axis=0).copy()
-    try:
-        for v in vars2d:
-            r[v] = (('datepair', *p[v].dims), vars2d_data[v] )
-    except Exception as e:
-
-        raise e
-    r['crs'] = p.crs
-    r.to_netcdf(dest_file)
-    r.close()
 
