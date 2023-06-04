@@ -325,6 +325,7 @@ def tiles2granules( tiles_file,
             password = config['default']['password']
             print (f"read ASF username/password from {cfgfile}")
         else:
+            print (f"cfg file {cfgfile} not found, asking for credentials")
             username = input('ASF username')
             password = getpass.getpass('ASF password')        
 
