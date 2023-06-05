@@ -454,10 +454,10 @@ def tiles2granules_job( chip,
         return
 
     # combine all patches
-    rdata = xr.merge([p['data'] for p in patches], compat='override')
-    rgeom = xr.merge([p['geom'] for p in patches], compat='override')
-    rmeta = xr.merge([p['meta'] for p in patches], compat='override')
-    rextra = xr.merge([p['extra'] for p in patches], compat='override')
+    rdata = xr.merge([p['data'] for p in patches])
+    rgeom = xr.merge([p['geom'] for p in patches])
+    rmeta = xr.merge([p['meta'] for p in patches])
+    rextra = xr.merge([p['extra'] for p in patches])
 
     # crs is unique
     rdata['crs'] = patches[0]['data'].crs[0]
