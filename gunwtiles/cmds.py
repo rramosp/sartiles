@@ -241,7 +241,7 @@ class GUNWGranule:
         else:
             lon_range = (maxlon, minlon)
 
-        patch_data = xz.sel(longitude=slice(*lon_range), latitude=slice(*lat_range))    
+        patch_data = xz.sel(longitude=slice(*lon_range), latitude=slice(*lat_range)).copy()    
         # add a datepair dimension with a single coordinate
         patch_data = patch_data.expand_dims(dim = {"datepair": [self.date_pair]}, axis=0).copy()
         xz.close()
@@ -458,7 +458,7 @@ def tiles2granules_job( chip,
     rgeom = xr.merge([p['geom'] for p in patches])
     rmeta = xr.merge([p['meta'] for p in patches])
     rextra = xr.merge([p['extra'] for p in patches])
-    
+
     # crs is unique
     rdata['crs'] = patches[0]['data'].crs[0]
     rgeom['crs'] = patches[0]['data'].crs[0]
@@ -480,6 +480,6 @@ def tiles2granules_job( chip,
         p['geom'].close()
         p['meta'].close()
         p['extra'].close()
-    return patches
+    return
 
 
