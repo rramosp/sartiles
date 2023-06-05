@@ -439,8 +439,7 @@ def tiles2granules_job( chip,
                 pp = gw.get_chip(chip.identifier, chip.geometry)
                 patches.append(pp)
                 urls_used.append(url)
-                
-                
+                        
         if len(patches)==0:
             # if tile is not contained in any selected granule, continue looking
             zz = zz[~zz['Granule Name'].isin(tile_granules['Granule Name'])]
@@ -454,7 +453,13 @@ def tiles2granules_job( chip,
         return
 
     # combine all patches
-    rdata = xr.merge([p['data'] for p in patches])
+    try:
+        rdata = xr.merge([p['data'] for p in patches])
+    except Exception as e:
+        print ("\n\n\nXXXX-----XXXXXXX")
+        print (f"\nERROR ON XXXX  {chip.identifier} XXXXX")
+        print ("\n\n\nXXXX-----XXXXXXX")
+        raise e
     rgeom = xr.merge([p['geom'] for p in patches])
     rmeta = xr.merge([p['meta'] for p in patches])
     rextra = xr.merge([p['extra'] for p in patches])
