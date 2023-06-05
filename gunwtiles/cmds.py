@@ -458,7 +458,7 @@ def tiles2granules_job( chip,
     rgeom = xr.merge([p['geom'] for p in patches])
     rmeta = xr.merge([p['meta'] for p in patches])
     rextra = xr.merge([p['extra'] for p in patches])
-
+    
     # crs is unique
     rdata['crs'] = patches[0]['data'].crs[0]
     rgeom['crs'] = patches[0]['data'].crs[0]
@@ -469,6 +469,17 @@ def tiles2granules_job( chip,
     rgeom.to_netcdf(dest_file, mode='a', group='/science/grids/imagingGeometry')
     rmeta.to_netcdf(dest_file, mode='a', group='/science/radarMetaData')
     rextra.to_netcdf(dest_file, mode='a', group='/science/extraMetaData', encoding={'deltadays': {'dtype':'uint8'}})
+    
+    
+    rdata.close()
+    rgeom.close()
+    rmeta.close()
+    rextra.close()
+    for p in patches:
+        p['data'].close()
+        p['geom'].close()
+        p['meta'].close()
+        p['extra'].close()
     return patches
 
 
