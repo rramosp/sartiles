@@ -428,9 +428,13 @@ def tiles2granules_job( chip,
         patches = []
         boundaries = []
         urls_used = []
-        
+        datepairs_used = []
         for url in tile_granules.URL.values:
             gw = GUNWGranule(url, cache_folder=granules_download_folder)
+            # in case the file falls 100% in two granules we just take the first one
+            if gw.date_pair in datepairs_used:
+                continue
+            datepairs_used.append(gw.date_pair)
             gw.download(username=username, password=password)
             # we only consider granules that contain 100% the tile, since otherwise would require
             # collating patches from different granules with the same exact datepair, etc.
@@ -455,14 +459,14 @@ def tiles2granules_job( chip,
     # combine all patches
     try:
         rdata = xr.merge([p['data'] for p in patches])
+        rgeom = xr.merge([p['geom'] for p in patches])
+        rmeta = xr.merge([p['meta'] for p in patches])
+        rextra = xr.merge([p['extra'] for p in patches])
     except Exception as e:
-        print ("\n\n\nXXXX-----XXXXXXX")
-        print (f"\nERROR ON XXXX  {chip.identifier} XXXXX")
-        print ("\n\n\nXXXX-----XXXXXXX")
+        print ("\n\n\n--exception merging--")
+        print (f"\nERROR ON tile {chip.identifier} ")
+        print ("\n-----------------------")
         raise e
-    rgeom = xr.merge([p['geom'] for p in patches])
-    rmeta = xr.merge([p['meta'] for p in patches])
-    rextra = xr.merge([p['extra'] for p in patches])
 
     # crs is unique
     rdata['crs'] = patches[0]['data'].crs[0]
