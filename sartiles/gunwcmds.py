@@ -303,7 +303,7 @@ def download_granules(tile_granules, granules_download_folder, username, passwor
         granules.append(gw)
     return granules
 
-def tiles2granules( tiles_file, 
+def download( tiles_file, 
                     tiles_folder, 
                     granules_download_folder, 
                     year, 
@@ -356,7 +356,7 @@ def tiles2granules( tiles_file,
     print (f"downloading {len(g)} tiles", flush=True)
     
     mParallel(n_jobs=n_jobs, verbose=30)(
-                    delayed(tiles2granules_job)( 
+                    delayed(download_job)( 
                         chip                     = chip, 
                         tiles_folder             = tiles_folder, 
                         granules_download_folder = granules_download_folder, 
@@ -371,7 +371,7 @@ def tiles2granules( tiles_file,
 
     
 
-def tiles2granules_job( chip, 
+def download_job( chip, 
                         tiles_folder, 
                         granules_download_folder, 
                         global_asf_query_result,

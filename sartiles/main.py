@@ -1,5 +1,5 @@
 import argparse
-from .cmds import *
+from . import gunwcmds 
 from . import __version__
 
 def main():
@@ -11,7 +11,7 @@ def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title='commands', dest='cmd')
     
-    grid_parser = subparsers.add_parser('tiles2granules', help='queries ASF to find what granules correspond to what tiles')
+    grid_parser = subparsers.add_parser('gunw', help='queries ASF to find what granules correspond to what tiles')
     grid_parser.add_argument('--tiles_file', required=True, type=str, help="geopandas dataframe containing tiles, with 'geometry' and 'identifier' columns")
     grid_parser.add_argument('--tiles_folder', required=True, type=str, help='where to store the resulting tiles')
     grid_parser.add_argument('--granules_download_folder', required=True, type=str, help='where to download the granules from ASF before tiling them')
@@ -26,10 +26,14 @@ def main():
     print ()
     args = parser.parse_args()
 
-    if args.cmd=='tiles2granules':
+    if args.cmd=='gunw':
+        print ("-----------------------------------------------------------")
+        print (f"JPL's Aria GUNW dataset extractor utility {__version__}")
+        print ("-----------------------------------------------------------")
+        print ()
 
         print ("mapping tiles to granules", flush=True)
-        tiles2granules(
+        gunwcmds.download(
                        tiles_file               = args.tiles_file, 
                        tiles_folder             = args.tiles_folder,
                        granules_download_folder = args.granules_download_folder,
