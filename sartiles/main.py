@@ -1,21 +1,32 @@
 import argparse
 import importlib.resources as pkg_resources
 import pandas as pd
+import os
 from . import gunw 
 from . import gssic
 from . import data
 from . import __version__
 
 
-tilelinks_fname = (pkg_resources.files(data) / 'Sentinel1-1_Coherence_Tiles_FileList.csv.gz')
+tilelinks_fname = (pkg_resources.files(data) / 'Sentinel1-1_Coherence_Tiles_FileList')
 tilelinks = {'file': None}
 def get_tilelinks():
     """
     returns dataframe with the list of tile links, caching it
     """
     if tilelinks['file'] is None:
-        print ("reading links file")
-        tilelinks['file'] = pd.read_csv(tilelinks_fname, index_col=0)
+
+        csvfile = f'{tilelinks_fname}.csv.gz'
+        hd5file = f'/tmp/Sentinel1-1_Coherence_Tiles_FileList.hd5'
+
+        if os.path.isfile(hd5file):
+            print ("reading links file from hdf")
+            tilelinks['file'] = pd.read_hdf(hd5file, index_col=0)
+        else:
+            print ("reading links file from csv")
+            tilelinks['file'] = pd.read_csv(csvfile, index_col=0)
+            print ("saving tile links to hdf for faster retrieval")
+            tilelinks['file'].to_hdf(hd5file, 'dataset')
 
     return tilelinks['file']
 
@@ -69,6 +80,7 @@ def main():
         print ("-----------------------------------------------------------")
         print ()
         # preload tiles list
+        get_tilelinks()        
         gssic.download(tiles_file               = args.tiles_file, 
                        tiles_folder             = args.tiles_folder, 
                        granules_download_folder = args.granules_download_folder, 
