@@ -181,7 +181,11 @@ class GSSICTile:
                 files_to_read.append(self.cache_files[c])
 
         xz_set = [xr.open_dataset(f, engine='rasterio') for f in files_to_read]
-        xz = merge_datasets(xz_set)
+        if len(xz_set)==1:
+            xz = xz_set[0]
+        else:
+            xz = merge_datasets(xz_set)
+    
         for s in xz_set:
             s.close()
 
