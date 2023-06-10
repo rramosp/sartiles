@@ -57,7 +57,6 @@ def main():
         print ("-----------------------------------------------------------")
         print ()
         # preload tiles list
-        gssic.get_tilelinks()
         gssic.download(tiles_file               = args.tiles_file, 
                        tiles_folder             = args.tiles_folder, 
                        granules_download_folder = args.granules_download_folder, 
