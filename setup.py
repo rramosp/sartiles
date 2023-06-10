@@ -15,7 +15,7 @@ setup(name='sartiles',
       scripts=[],
       entry_points={
             "console_scripts": [
-                  "sart = gunwtiles.main:main",
+                  "sart = sartiles.main:main",
             ],      
       },
       packages=['sartiles'],
