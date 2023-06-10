@@ -10,7 +10,7 @@ from . import __version__
 
 tilelinks_fname = (pkg_resources.files(data) / 'Sentinel1-1_Coherence_Tiles_FileList')
 tilelinks = {'file': None}
-def get_tilelinks():
+def get_tilelinks(verbose=False):
     """
     returns dataframe with the list of tile links, caching it
     """
@@ -20,12 +20,15 @@ def get_tilelinks():
         pqtfile = f'/tmp/Sentinel1-1_Coherence_Tiles_FileList.parquet'
 
         if os.path.isfile(pqtfile):
-            print ("reading links file from parquet")
+            if verbose:
+                print ("reading links file from parquet")
             tilelinks['file'] = pd.read_parquet(pqtfile)
         else:
-            print ("reading links file from csv")
+            if verbose:
+                print ("reading links file from csv")
             tilelinks['file'] = pd.read_csv(csvfile, index_col=0)
-            print ("saving tile links to parquet for faster retrieval")
+            if verbose:
+                print ("saving tile links to parquet for faster retrieval")
             tilelinks['file'].to_parquet(pqtfile)
 
     return tilelinks['file']
@@ -80,7 +83,7 @@ def main():
         print ("-----------------------------------------------------------")
         print ()
         # preload tiles list
-        get_tilelinks()        
+        get_tilelinks(verbose=True)        
         gssic.download(tiles_file               = args.tiles_file, 
                        tiles_folder             = args.tiles_folder, 
                        granules_download_folder = args.granules_download_folder, 
