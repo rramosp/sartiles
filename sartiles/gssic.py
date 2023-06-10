@@ -18,8 +18,6 @@ import getpass
 import geopandas as gpd
 from geetiles import utils
 
-tilelinks_fname = (pkg_resources.files(data) / 'Sentinel1-1_Coherence_Tiles_FileList.csv.gz')
-tilelinks = {'file': None}
 
 def flatten(alist, r=[]):
     for i in alist:
@@ -51,18 +49,6 @@ def check_xy_coords_equal(patch_list):
         raise ValueError("patches with different y coordinate")
 
     return True
-    
-
-def get_tilelinks():
-    """
-    returns dataframe with the list of tile links, caching it
-    """
-    if tilelinks['file'] is None:
-        print ("reading links file")
-        tilelinks['file'] = pd.read_csv(tilelinks_fname, index_col=0)
-
-    return tilelinks['file']
-
 
 def lonlat2tileid(lon, lat):
     lon_prefix = 'W' if lon<0 else 'E'
@@ -84,9 +70,7 @@ def lonlat2tileid(lon, lat):
         lat_prefix = 'N'
         lat_tile   = np.ceil(np.abs(lat)).astype(int)
 
-
     return f'{lat_prefix}{lat_tile:02d}{lon_prefix}{lon_tile:03d}'
-
 
 def plot_chip(c):
     for ax,g in subplots(c.feature.values, usizex=4, usizey=2.5):
@@ -121,10 +105,11 @@ class GSSICTile:
 
     season_names = [ 'summer', 'fall', 'winter', 'spring' ]
     
-    def __init__(self, lon, lat, cache_folder):
+    def __init__(self, lon, lat, cache_folder, get_tilelinks_fn):
         self.lon = lon
         self.lat = lat
-        alllinks         = get_tilelinks()
+        self.get_tilelinks_fn = get_tilelinks_fn
+        alllinks         = get_tilelinks_fn()
         self.tileid      = lonlat2tileid(lon, lat)
         self.tilelinks   = alllinks[alllinks.TILE==self.tileid]
         self.local_files = {}
@@ -134,7 +119,10 @@ class GSSICTile:
         self.reset_cache_file_list()
         
     def clone(self):
-        r = self.__class__(self.lon, self.lat, self.cache_folder)
+        r = self.__class__(lon = self.lon, 
+                           lat = self.lat, 
+                           cache_folder = self.cache_folder, 
+                           get_tilelinks_fn = self.get_tilelinks_fn)
         r.cache_files = self.cache_files.copy()
         r.local_files = self.local_files.copy()
         return r
@@ -199,7 +187,6 @@ class GSSICTile:
 
         return xz
 
-
     def get_component_season_patch(self, chip_identifier, chip_geometry, component, season = None):
         """
         extracts a geometry from a component/season
@@ -227,8 +214,7 @@ class GSSICTile:
             lon_range = (minlon, maxlon)
         else:
             lon_range = (maxlon, minlon)
-
-            
+           
         patch_data = xz.sel(x=slice(*lon_range), y=slice(*lat_range)).copy()    
 
         xz.close()
@@ -243,8 +229,7 @@ class GSSICTile:
         for s in self.season_names:
             for c in self.season_component_names:
                 self.download_component(username, password, c, s)
-        
-        
+              
     def download_component(self, username, password, component, season=None ):        
 
         # restrict to links for the tile and components
@@ -376,19 +361,21 @@ class GSSIC_Chip_Builder:
     chips overlapping across different GSSIC tiles.
     """
     
-    def __init__(self, chip_identifier, chip_geometry, cache_folder):
+    def __init__(self, chip_identifier, chip_geometry, cache_folder, get_tilelinks_fn):
         
         self.chip_identifier = chip_identifier
         self.chip_geometry = chip_geometry
         self.cache_folder = cache_folder
-        
+        self.get_tilelinks_fn = get_tilelinks_fn
+
         coords = np.r_[chip_geometry.boundary.coords]
         coords = pd.DataFrame(coords, columns=['x', 'y'])
         coords['xr'] = np.floor(coords['x']).astype(int).astype(str)
         coords['yr'] = np.floor(coords['y']).astype(int).astype(str)
         coords['xy'] = coords.xr + coords.yr
         gtile_coords = coords.groupby('xy')[['x', 'y']].mean()
-        self.gtiles = [GSSICTile(lon, lat, cache_folder=self.cache_folder) for lon, lat in gtile_coords.values]
+        self.gtiles = [GSSICTile(lon, lat, cache_folder=self.cache_folder, get_tilelinks_fn=get_tilelinks_fn) \
+                       for lon, lat in gtile_coords.values]
 
         
     def download(self, username, password):
@@ -429,15 +416,18 @@ def touch(filename, content):
         f.write(content+"\n")
 
 
-def download(       tiles_file, 
-                    tiles_folder, 
-                    granules_download_folder, 
-                    username=None, 
-                    password=None,
-                    no_retry = False,
-                    n_jobs = -1,
-                    g = None,         # in case we preload tiles file, for debugging
-                    ):
+def download(
+                tiles_file, 
+                tiles_folder, 
+                granules_download_folder, 
+                get_tilelinks_fn,
+                username = None, 
+                password = None,
+                no_retry = False,
+                n_jobs   = -1,
+                g        = None,         # in case we preload tiles file, for debugging
+            ):
+
     if username is None:
 
         cfgfile = f"{os.environ['HOME']}/.asf.cfg" 
@@ -465,6 +455,7 @@ def download(       tiles_file,
                         granules_download_folder = granules_download_folder, 
                         username                 = username, 
                         password                 = password,
+                        get_tilelinks_fn         = get_tilelinks_fn,
                         no_retry                 = no_retry
                      )
                      for _,chip in g.sample(len(g)).iterrows()
@@ -475,6 +466,7 @@ def download_job( chip,
                   granules_download_folder, 
                   username, 
                   password,
+                  get_tilelinks_fn,
                   no_retry = False,
                 ):
     
@@ -500,7 +492,8 @@ def download_job( chip,
 
     cb = GSSIC_Chip_Builder(chip.identifier, 
                             chip.geometry, 
-                            cache_folder=granules_download_folder)
+                            cache_folder=granules_download_folder,
+                            get_tilelinks_fn = get_tilelinks_fn)
     try:
         cb.download(username, password)
     except Exception as e:

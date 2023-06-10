@@ -383,7 +383,6 @@ def download_job( chip,
     tile = chip.geometry
     dest_file = f"{tiles_folder}/{chip.identifier}.nc"
     skipped_file = f"{tiles_folder}/{chip.identifier}.skipped"
-    
     # if already processed, skip
     #print ("dest file", dest_file)
     if os.path.isfile(dest_file):

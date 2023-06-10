@@ -1,13 +1,25 @@
 import argparse
+import importlib.resources as pkg_resources
+import pandas as pd
 from . import gunw 
 from . import gssic
+from . import data
 from . import __version__
 
+
+tilelinks_fname = (pkg_resources.files(data) / 'Sentinel1-1_Coherence_Tiles_FileList.csv.gz')
+tilelinks = {'file': None}
+def get_tilelinks():
+    """
+    returns dataframe with the list of tile links, caching it
+    """
+    if tilelinks['file'] is None:
+        print ("reading links file")
+        tilelinks['file'] = pd.read_csv(tilelinks_fname, index_col=0)
+
+    return tilelinks['file']
+
 def main():
-
-
-    
-
 
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title='commands', dest='cmd')
@@ -61,5 +73,6 @@ def main():
                        tiles_folder             = args.tiles_folder, 
                        granules_download_folder = args.granules_download_folder, 
                        n_jobs                   = args.n_jobs,
-                       no_retry                 = args.no_retry
+                       no_retry                 = args.no_retry,
+                       get_tilelinks_fn         = get_tilelinks
         )        
