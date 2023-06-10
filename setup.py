@@ -8,7 +8,7 @@ setup(name='sartiles',
                         'geopandas', 'pyproj', 'rasterio', 'retry', 
                         'earthengine-api', 'alphashape', 'rlxutils',
                         'xarray', 'netcdf4', 'beautifulsoup4', 'lxml',
-                        'rioxarray', 'tables'
+                        'rioxarray', 'tables', 'fastparquet'
                        ],
       use_scm_version=True,
       setup_requires=['setuptools_scm'],
