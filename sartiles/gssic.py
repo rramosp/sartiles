@@ -122,7 +122,6 @@ class GSSICTile:
         self.random_id   = f'{np.random.randint(100000000):09d}'
         self.cache_folder      = cache_folder
         self.cache_tile_folder = f'{self.cache_folder}/{self.tileid}'
-        self.cache_files = {}
         self.reset_cache_file_list()
         
     def clone(self):
@@ -132,11 +131,8 @@ class GSSICTile:
         return r
 
     def reset_cache_file_list(self):
-        for c in self.geometry_component_names:
-            self.cache_files[c] = None
-        for s in self.season_names:
-            for c in self.season_component_names:
-                self.cache_files[self.get_full_component(c,s)] = None
+        self.cache_files = {}
+        return
 
     def get_bounds(self):
         xz = xr.open_dataset(self.cache_files['inc'], engine='rasterio')    
@@ -145,17 +141,21 @@ class GSSICTile:
         xz.close()
         return r    
 
-    def get_local_filename(self, component, season = None):
-        return self.get_local_basename(component, season) + "."+self.random_id
+    def get_local_filename(self, component, season = None, idx=0):
+        return self.get_local_basename(component, season, idx) + "."+self.random_id
 
-    def get_full_component(self, component, season=None):
+    def get_full_component(self, component, season=None, idx=0):
         """
         builds a string with the component and season
+        idx only used for component 'inc' or 'lsmap'
         """
         if component in self.geometry_component_names:
             if season is not None:
                 raise ValueError("cannot specify season for components 'inc' or 'lsmap'")                
-            return component
+            if idx is not None:
+                return f'{component}-{idx:02d}'
+            else:
+                return component
         elif component in self.season_component_names:
             if not season in self.season_names:
                 raise ValueError(f"invalid season '{season}'. valid are {self.season_names}")
@@ -163,11 +163,10 @@ class GSSICTile:
         else:
             raise ValueError(f"invalid component {component}")
     
-    def get_local_basename(self, component, season = None):
-        return f'{self.cache_tile_folder}/{self.tileid}_{self.get_full_component(component, season)}.tif'
+    def get_local_basename(self, component, season = None, idx=0):
+        return f'{self.cache_tile_folder}/{self.tileid}_{self.get_full_component(component, season, idx)}.tif'
         
     def read_component(self, component, season=None):
-
         """
         reads component files once they have been downloaded.
         if we have a list of files, this means that the chip overlaps
@@ -175,15 +174,22 @@ class GSSICTile:
         """
         c = self.get_full_component(component, season)
 
-        if isinstance(self.cache_files[c], list):
-            xz_set = [xr.open_dataset(f, engine='rasterio') for f in self.cache_files[c]]
-            xz = merge_datasets(xz_set)
-            for s in xz_set:
-                s.close()
-        else:
-            xz = xr.open_dataset(self.cache_files[c], engine='rasterio')
+        files_to_read = []
+        for c in self.cache_files.keys():
+            if component not in c:
+                continue
+            if isinstance(self.cache_files[c], list):
+                files_to_read += self.cache_files[c]
+            else:
+                files_to_read.append(self.cache_files[c])
+
+        xz_set = [xr.open_dataset(f, engine='rasterio') for f in files_to_read]
+        xz = merge_datasets(xz_set)
+        for s in xz_set:
+            s.close()
 
         return xz
+
 
     def get_component_season_patch(self, chip_identifier, chip_geometry, component, season = None):
         """
@@ -231,50 +237,49 @@ class GSSICTile:
         
         
     def download_component(self, username, password, component, season=None ):        
-        # first, try to find a file already downloaded
-        local_basename = self.get_local_basename(component, season)
-        full_component = self.get_full_component(component, season)
-                
-        # tries to find any file with this basename. this is done so that parallel processes
-        # can attempt to download the same file independently and posterior calls will try
-        # to find anyone which has already been downloaded.
-        for filename in glob(f"{local_basename}*"):
-            try:
-                xz = rxr.open_rasterio(filename)
-                xz.close()
-                self.cache_files[full_component] = filename
-                break
-            except Exception as e:
-                continue
-                                
-        if self.cache_files[full_component] is None:
-            self.cache_files[full_component] = f"{local_basename}_{self.random_id}"
-        else:
-            return self
-        
 
-        # if not downloaded, download it.
         # restrict to links for the tile and components
-        url = self.tilelinks[self.tilelinks.FILENAME.str.contains(full_component)]
-        
-        if len(url)==0:
+        full_component = self.get_full_component(component, season, idx=None)
+        tlinks = self.tilelinks[self.tilelinks.FILENAME.str.contains(full_component)]
+
+        if len(tlinks)==0:
             raise ValueError(f"component {full_component} not found")
         
-        url = url.iloc[0].LINK
-        os.makedirs(self.cache_tile_folder, exist_ok=True )
-        
-        print ("downloading", url, flush=True)
-        cmd_string = f"wget --output-document={self.cache_files[full_component]} --http-user={username} --http-password={password} {url}"
-        cmd = Command(cmd_string, cwd=self.cache_tile_folder)
-        cmd.run().wait(raise_exception_on_error=True)
-        if cmd.exitcode()!=0:
-            raise ValueError(f"error downloading. cmd is {cmd_string}\n\n exit code {cmd.exitcode()} \n\nstderr\n{cmd.stderr()} \n\nstdout\n{cmd.stdout()}")
+        for idx,url in enumerate(tlinks.LINK.values): 
+            local_basename = self.get_local_basename(component, season, idx=idx)
+            full_component = self.get_full_component(component, season, idx=idx)
 
-        if not os.path.isfile(self.cache_files[full_component]):
-            raise ValueError(f"{self.tileid} {component} {full_component} not downloaded")
+            # tries to find any file with this basename. this is done so that parallel processes
+            # can attempt to download the same file independently and posterior calls will try
+            # to find anyone which has already been downloaded.
+            for filename in glob(f"{local_basename}*"):
+                try:
+                    xz = rxr.open_rasterio(filename)
+                    xz.close()
+                    self.cache_files[full_component] = filename
+                    break
+                except Exception as e:
+                    continue
+
+            if not full_component in self.cache_files.keys() or self.cache_files[full_component] is None:
+                self.cache_files[full_component] = f"{local_basename}_{self.random_id}"
+            else:
+                continue
             
+            # if not downloaded, download it.
+            os.makedirs(self.cache_tile_folder, exist_ok=True )
+            
+            print ("downloading", url, flush=True)
+            cmd_string = f"wget --output-document={self.cache_files[full_component]} --http-user={username} --http-password={password} {url}"
+            cmd = Command(cmd_string, cwd=self.cache_tile_folder)
+            cmd.run().wait(raise_exception_on_error=True)
+            if cmd.exitcode()!=0:
+                raise ValueError(f"error downloading. cmd is {cmd_string}\n\n exit code {cmd.exitcode()} \n\nstderr\n{cmd.stderr()} \n\nstdout\n{cmd.stdout()}")
+
+            if not os.path.isfile(self.cache_files[full_component]):
+                raise ValueError(f"{self.tileid} {component} {full_component} not downloaded")
+                        
         return self
-        
                     
 
     def get_chip(self, chip_identifier, chip_geometry):
@@ -384,7 +389,15 @@ class GSSIC_Chip_Builder:
         self.gmain = self.gtiles[0].clone()
         
         if len(self.gtiles)>1:
-            self.gmain.cache_files = {k: [gi.cache_files[k] for gi in self.gtiles] for k in self.gmain.cache_files.keys()}        
+            cf = {}
+            for gt in self.gtiles:
+                for k,v in gt.cache_files.items():
+                    if not k in cf:
+                        cf[k] = []
+                    cf[k].append(v)
+
+
+            self.gmain.cache_files = cf        
             
     def get_chip(self):
         """
@@ -424,8 +437,8 @@ def download(       tiles_file,
             print (f"read ASF username/password from {cfgfile}")
         else:
             print (f"cfg file {cfgfile} not found, asking for credentials")
-            username = input('ASF username')
-            password = getpass.getpass('ASF password')        
+            username = input('ASF username: ')
+            password = getpass.getpass('ASF password: ')        
 
     if g is None:
         print ("reading tiles file", flush=True)
