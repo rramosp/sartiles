@@ -458,8 +458,6 @@ def download(       tiles_file,
 
     print (f"downloading {len(g)} tiles", flush=True)
 
-    preloaded_tilelinks = get_tilelinks()
-
     mParallel(n_jobs=n_jobs, verbose=30)(
                     delayed(download_job)( 
                         chip                     = chip, 
@@ -467,8 +465,8 @@ def download(       tiles_file,
                         granules_download_folder = granules_download_folder, 
                         username                 = username, 
                         password                 = password,
-                        no_retry                 = no_retry,
-                        preloaded_tilelinks      = preloaded_tilelinks)
+                        no_retry                 = no_retry
+                     )
                      for _,chip in g.sample(len(g)).iterrows()
             ) 
 
@@ -478,12 +476,8 @@ def download_job( chip,
                   username, 
                   password,
                   no_retry = False,
-                  preloaded_tilelinks = None, # if preloaded to avoid loading this in this job                    
                 ):
     
-    if preloaded_tilelinks is not None:
-        tilelinks['file'] = preloaded_tilelinks
-
     retry_skipped = not no_retry
     tile = chip.geometry
     dest_file = f"{tiles_folder}/{chip.identifier}.nc"
