@@ -21,6 +21,15 @@ from geetiles import utils
 tilelinks_fname = (pkg_resources.files(data) / 'Sentinel1-1_Coherence_Tiles_FileList.csv.gz')
 tilelinks = {'file': None}
 
+def flatten(alist, r=[]):
+    for i in alist:
+        if isinstance(i, list):
+            r = flatten(i, r)
+        else:
+            r.append(i)
+    
+    return r
+
 def check_xy_coords_equal(patch_list):
     csetx = [p.coords['x'].values for p in patch_list]
     csety = [p.coords['y'].values for p in patch_list]
@@ -353,8 +362,11 @@ class GSSICTile:
             )
 
         ds.rio.write_transform(transform, inplace=True)\
-        .rio.write_crs('4326',inplace=True,)\
-        .rio.write_coordinate_system(inplace=True)
+          .rio.write_crs('4326',inplace=True)\
+          .rio.write_coordinate_system(inplace=True)
+
+        for p in flatten(ppol + pcoh + pfit + pgeom):
+            p.close()
 
         return ds
         
