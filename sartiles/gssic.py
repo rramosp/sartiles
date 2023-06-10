@@ -4,7 +4,7 @@ import xarray as xr
 import rioxarray as rxr
 from glob import glob
 import importlib.resources as pkg_resources
-from rlxutils import Command, mParallel
+from rlxutils import Command, mParallel, ElapsedTimes
 from joblib import delayed
 import os
 from rasterio.transform import Affine
@@ -13,11 +13,14 @@ import matplotlib.pyplot as plt
 from rlxutils import subplots 
 import shapely as sh
 from rioxarray.merge import merge_datasets
+from xarray import merge
 import configparser
 import getpass
 import geopandas as gpd
+import hashlib
 from geetiles import utils
 
+timer = {'t': ElapsedTimes()}
 
 def flatten(alist, r=[]):
     for i in alist:
@@ -27,6 +30,15 @@ def flatten(alist, r=[]):
             r.append(i)
     
     return r
+
+def gethash(s):
+    """
+    returns and md5 hashcode for a string
+    """
+    k = int(hashlib.sha256(s.encode('utf-8')).hexdigest(), 16) % 10**15
+    k = str(hex(k))[2:].zfill(13)
+    return k
+
 
 def check_xy_coords_equal(patch_list):
     csetx = [p.coords['x'].values for p in patch_list]
@@ -169,25 +181,32 @@ class GSSICTile:
         if we have a list of files, this means that the chip overlaps
         various tiles, so we load and merge them all
         """
-        c = self.get_full_component(component, season)
+
+        full_component = self.get_full_component(component, season, idx=None)
 
         files_to_read = []
-        for c in self.cache_files.keys():
-            if component not in c:
+
+        for c in self.cache_files.keys():            
+            if not c.startswith(full_component):
                 continue
             if isinstance(self.cache_files[c], list):
                 files_to_read += self.cache_files[c]
             else:
                 files_to_read.append(self.cache_files[c])
 
-        xz_set = [xr.open_dataset(f, engine='rasterio') for f in files_to_read]
-        if len(xz_set)==1:
-            xz = xz_set[0]
+        if len(files_to_read)>1:
+            #basedir = "/".join(files_to_read[0].split("/")[:-1])
+            #merged_fname = basedir+"/merged_"+gethash("__".join([fi.split("/")[-1] for fi in files_to_read]))+".nc"
+            #if os.path.isfile(merged_fname):
+            #    xz = xr.open_dataset(merged_fname, engine='netcdf4')
+            #else:
+                xz_set = [xr.open_dataset(f, engine='rasterio') for f in files_to_read]
+                xz = merge_datasets(xz_set)
+             #   xz.to_netcdf(merged_fname)
+                for s in xz_set:
+                    s.close()
         else:
-            xz = merge_datasets(xz_set)
-    
-        for s in xz_set:
-            s.close()
+            xz = xr.open_dataset(files_to_read[0], engine='rasterio')
 
         return xz
 
@@ -235,7 +254,6 @@ class GSSICTile:
                 self.download_component(username, password, c, s)
               
     def download_component(self, username, password, component, season=None ):        
-
         # restrict to links for the tile and components
         full_component = self.get_full_component(component, season, idx=None)
         tlinks = self.tilelinks[self.tilelinks.FILENAME.str.contains(full_component)]
@@ -276,25 +294,27 @@ class GSSICTile:
 
             if not os.path.isfile(self.cache_files[full_component]):
                 raise ValueError(f"{self.tileid} {component} {full_component} not downloaded")
-                        
+
         return self
                     
 
     def get_chip(self, chip_identifier, chip_geometry):
+        et = timer['t']
 
         # read all chip geometry in all files
-        ppol = [[self.get_component_season_patch(chip_identifier, chip_geometry, c, s) \
-                    for c in self.pol_components_names] for s in self.season_names] 
+        with et('getting patches'):
+            ppol = [[self.get_component_season_patch(chip_identifier, chip_geometry, c, s) \
+                        for c in self.pol_components_names] for s in self.season_names] 
 
-        pcoh = [[self.get_component_season_patch(chip_identifier, chip_geometry, c, s) \
-                    for c in self.coh_component_names] for s in self.season_names] 
+            pcoh = [[self.get_component_season_patch(chip_identifier, chip_geometry, c, s) \
+                        for c in self.coh_component_names] for s in self.season_names] 
 
 
-        pfit = [[self.get_component_season_patch(chip_identifier, chip_geometry, c, s) \
-                    for c in self.fit_component_names] for s in self.season_names] 
+            pfit = [[self.get_component_season_patch(chip_identifier, chip_geometry, c, s) \
+                        for c in self.fit_component_names] for s in self.season_names] 
 
-        pgeom = [self.get_component_season_patch(chip_identifier, chip_geometry, c) \
-                    for c in self.geometry_component_names]
+            pgeom = [self.get_component_season_patch(chip_identifier, chip_geometry, c) \
+                        for c in self.geometry_component_names]
 
 
         check_xy_coords_equal([p for pp in ppol for p in pp] +\
@@ -333,29 +353,33 @@ class GSSICTile:
         transform = Affine.scale(xres, yres) * Affine.translation(lons.min() , lats.max() )
         transform
 
-        # put everything together
-        ds = xr.Dataset(
-                coords = {'deltadays': deltadays, 
-                        'polarimetry':pols, 
-                        'param': fitparams,
-                        'feature': features,
-                        'season': seasons,
-                        'x': lons, 
-                        'y': lats},
-                data_vars = {
-                    'amplitude': (['season', 'polarimetry', 'y', 'x'], vpol),
-                    'coherence': (['season', 'deltadays', 'y', 'x'], vcoh),
-                    'decaymodel':(['season', 'param', 'y', 'x'], vfit),
-                    'geometry':  (['feature', 'y', 'x'], vgeom)
-                }
-            )
 
-        ds.rio.write_transform(transform, inplace=True)\
-          .rio.write_crs('4326',inplace=True)\
-          .rio.write_coordinate_system(inplace=True)
+        with et("make xarray"):
+            # put everything together
+            ds = xr.Dataset(
+                    coords = {'deltadays': deltadays, 
+                            'polarimetry':pols, 
+                            'param': fitparams,
+                            'feature': features,
+                            'season': seasons,
+                            'x': lons, 
+                            'y': lats},
+                    data_vars = {
+                        'amplitude': (['season', 'polarimetry', 'y', 'x'], vpol),
+                        'coherence': (['season', 'deltadays', 'y', 'x'], vcoh),
+                        'decaymodel':(['season', 'param', 'y', 'x'], vfit),
+                        'geometry':  (['feature', 'y', 'x'], vgeom)
+                    }
+                )
 
-        for p in flatten(ppol + pcoh + pfit + pgeom):
-            p.close()
+        with et("save file"):
+            ds.rio.write_transform(transform, inplace=True)\
+            .rio.write_crs('4326',inplace=True)\
+            .rio.write_coordinate_system(inplace=True)
+
+        with et("closing stuff"):
+            for p in flatten(ppol + pcoh + pfit + pgeom):
+                p.close()
 
         return ds
         
@@ -378,6 +402,7 @@ class GSSIC_Chip_Builder:
         coords['yr'] = np.floor(coords['y']).astype(int).astype(str)
         coords['xy'] = coords.xr + coords.yr
         gtile_coords = coords.groupby('xy')[['x', 'y']].mean()
+
         self.gtiles = [GSSICTile(lon, lat, cache_folder=self.cache_folder, get_tilelinks_fn=get_tilelinks_fn) \
                        for lon, lat in gtile_coords.values]
 
@@ -474,48 +499,55 @@ def download_job( chip,
                   no_retry = False,
                 ):
     
-    retry_skipped = not no_retry
-    tile = chip.geometry
-    dest_file = f"{tiles_folder}/{chip.identifier}.nc"
-    skipped_file = f"{tiles_folder}/{chip.identifier}.skipped"
-
-    # if already processed, skip
-    if os.path.isfile(dest_file):
-        return
-
-    # if attempted previously but failed, retry if requested in case
-    # of transitory errors (could not connect, etc.)
-    if retry_skipped and os.path.isfile(skipped_file):
-        with open(skipped_file) as f:
-            errorcode = f.read()
-            if errorcode.strip().split(" ")[0] in ['COULD_NOT_DOWNLOAD']:
-                pass   # method will continue and tile fownload will be retried
-            else:
-                return # dont do anything, no retry
+    timer['t'] = ElapsedTimes()
+    et = timer['t']
+    with et('total'):
 
 
-    cb = GSSIC_Chip_Builder(chip.identifier, 
-                            chip.geometry, 
-                            cache_folder=granules_download_folder,
-                            get_tilelinks_fn = get_tilelinks_fn)
-    try:
-        cb.download(username, password)
-    except Exception as e:
-        touch(skipped_file, 'COULD_NOT_DOWNLOAD '+str(e))
-        return
-    
-    try:
-        c = cb.get_chip()
-    except Exception as e:
+        retry_skipped = not no_retry
+        dest_file = f"{tiles_folder}/{chip.identifier}.nc"
+        skipped_file = f"{tiles_folder}/{chip.identifier}.skipped"
+        # if already processed, skip
+        if os.path.isfile(dest_file):
+            return
+
+        # if attempted previously but failed, retry if requested in case
+        # of transitory errors (could not connect, etc.)
+        if retry_skipped and os.path.isfile(skipped_file):
+            with open(skipped_file) as f:
+                errorcode = f.read()
+                if errorcode.strip().split(" ")[0] in ['COULD_NOT_DOWNLOAD']:
+                    pass   # method will continue and tile fownload will be retried
+                else:
+                    return # dont do anything, no retry
+
+
+        cb = GSSIC_Chip_Builder(chip.identifier, 
+                                chip.geometry, 
+                                cache_folder=granules_download_folder,
+                                get_tilelinks_fn = get_tilelinks_fn)
+        try:
+            with et('download'):
+                cb.download(username, password)
+        except Exception as e:
+            touch(skipped_file, 'COULD_NOT_DOWNLOAD '+str(e))
+            return
+        
+        try:
+            with et("get_chip"):
+                c = cb.get_chip()
+        except Exception as e:
+            c.close()
+            touch(skipped_file, 'COULD_NOT_GET_CHIP '+str(e))
+            return
+        
+        try:
+            c.to_netcdf(dest_file)
+        except Exception as e:
+            c.close()
+            touch(skipped_file, 'COULD_NOT_WRITE_CHIP '+str(e))
+            return
+        
         c.close()
-        touch(skipped_file, 'COULD_NOT_GET_CHIP '+str(e))
-        return
-    
-    try:
-        c.to_netcdf(dest_file)
-    except Exception as e:
-        c.close()
-        touch(skipped_file, 'COULD_NOT_WRITE_CHIP '+str(e))
-        return
-    
-    c.close()
+
+    #print ("elapsed times", et)
