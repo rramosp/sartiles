@@ -435,8 +435,8 @@ def download(       tiles_file,
                     username=None, 
                     password=None,
                     no_retry = False,
-                    n_jobs = -1,                    
-                    g = None, # in case we preload tiles file, for debugging
+                    n_jobs = -1,
+                    g = None,         # in case we preload tiles file, for debugging
                     ):
     if username is None:
 
@@ -457,7 +457,9 @@ def download(       tiles_file,
         g = gpd.read_file(tiles_file)
 
     print (f"downloading {len(g)} tiles", flush=True)
-    
+
+    preloaded_tilelinks = get_tilelinks()
+
     mParallel(n_jobs=n_jobs, verbose=30)(
                     delayed(download_job)( 
                         chip                     = chip, 
@@ -465,7 +467,8 @@ def download(       tiles_file,
                         granules_download_folder = granules_download_folder, 
                         username                 = username, 
                         password                 = password,
-                        no_retry                 = no_retry)
+                        no_retry                 = no_retry,
+                        preloaded_tilelinks      = preloaded_tilelinks)
                      for _,chip in g.sample(len(g)).iterrows()
             ) 
 
@@ -474,8 +477,13 @@ def download_job( chip,
                   granules_download_folder, 
                   username, 
                   password,
-                  no_retry = False):
+                  no_retry = False,
+                  preloaded_tilelinks = None, # if preloaded to avoid loading this in this job                    
+                ):
     
+    if preloaded_tilelinks is not None:
+        tilelinks['file'] = preloaded_tilelinks
+
     retry_skipped = not no_retry
     tile = chip.geometry
     dest_file = f"{tiles_folder}/{chip.identifier}.nc"
