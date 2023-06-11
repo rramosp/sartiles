@@ -351,7 +351,6 @@ class GSSICTile:
         # define raster affine transform
         transform = Affine.scale(xres, yres) * Affine.translation(lons.min() - xres / 2, lons.max() + yres / 2)
         transform = Affine.scale(xres, yres) * Affine.translation(lons.min() , lats.max() )
-        transform
 
 
         with et("make xarray"):
@@ -537,14 +536,12 @@ def download_job( chip,
             with et("get_chip"):
                 c = cb.get_chip()
         except Exception as e:
-            c.close()
             touch(skipped_file, 'COULD_NOT_GET_CHIP '+str(e))
             return
         
         try:
             c.to_netcdf(dest_file)
         except Exception as e:
-            c.close()
             touch(skipped_file, 'COULD_NOT_WRITE_CHIP '+str(e))
             return
         
