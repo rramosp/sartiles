@@ -4,6 +4,7 @@ import pandas as pd
 import os
 from . import gunw 
 from . import gssic
+from . import chop
 from . import data
 from . import __version__
 
@@ -55,11 +56,18 @@ def main():
     grid_parser.add_argument('--no_retry', default=False, action='store_true', help='if set, skipped tiles in previous runs will not be retried')
     grid_parser.add_argument('--n_jobs', default=-1, type=int, help='number of parallel jobs (defaults to -1, using all CPUs)')
 
+    grid_parser = subparsers.add_parser('chop', help='chips any xarray readable (netcfd, tif) file into tiles')
+    grid_parser.add_argument('--tiles_file', required=True, type=str, help="geopandas dataframe containing tiles, with 'geometry' and 'identifier' columns")
+    grid_parser.add_argument('--tiles_folder', required=True, type=str, help='where to store the resulting tiles')
+    grid_parser.add_argument('--source_file', required=True, type=str, help='the xarray readable file to chop')
+    grid_parser.add_argument('--n_jobs', default=-1, type=int, help='number of parallel jobs (defaults to -1, using all CPUs)')
+
+
 
     print ("-----------------------------------------------------------")
-    print (f"SAR datasets download and tiling utilitu {__version__}")
+    print (f"SAR datasets download and tiling utility {__version__}")
     print ("-----------------------------------------------------------")
-    print ()
+
     args = parser.parse_args()
 
     if args.cmd=='gunw':
@@ -91,3 +99,15 @@ def main():
                        no_retry                 = args.no_retry,
                        get_tilelinks_fn         = get_tilelinks
         )        
+
+    elif args.cmd=='chop':
+        print (f"Chopping file")
+        print ("-----------------------------------------------------------")
+        print ()
+
+        chop.chop(tiles_file   = args.tiles_file,
+                  tiles_folder = args.tiles_folder,
+                  source_file  = args.source_file,
+                  n_jobs       = args.n_jobs)        
+
+        

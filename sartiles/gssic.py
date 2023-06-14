@@ -502,7 +502,6 @@ def download_job( chip,
     et = timer['t']
     with et('total'):
 
-
         retry_skipped = not no_retry
         dest_file = f"{tiles_folder}/{chip.identifier}.nc"
         skipped_file = f"{tiles_folder}/{chip.identifier}.skipped"
@@ -520,11 +519,11 @@ def download_job( chip,
                 else:
                     return # dont do anything, no retry
 
-
         cb = GSSIC_Chip_Builder(chip.identifier, 
                                 chip.geometry, 
                                 cache_folder=granules_download_folder,
                                 get_tilelinks_fn = get_tilelinks_fn)
+
         try:
             with et('download'):
                 cb.download(username, password)
