@@ -6,7 +6,7 @@ from rlxutils import mParallel
 from joblib import delayed
 import geopandas as gpd
 
-def extract_chip(source_file, chip_geometry, chip_identifier, dest_folder):
+def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifier, dest_folder):
     dest_file = f"{dest_folder}/{chip_identifier}.nc"
     if os.path.isfile(dest_file):
         return
@@ -19,12 +19,12 @@ def extract_chip(source_file, chip_geometry, chip_identifier, dest_folder):
     minlon, minlat = coords.min(axis=0)
     maxlon, maxlat = coords.max(axis=0)
 
-    if is_ascending(z.lat.values):
+    if is_ascending(z[lat_field].values):
         lat_range = (minlat, maxlat)
     else:
         lat_range = (maxlat, minlat)
 
-    if is_ascending(z.lon.values):
+    if is_ascending(z[lon_field].values):
         lon_range = (minlon, maxlon)
     else:
         lon_range = (maxlon, minlon)
@@ -33,11 +33,11 @@ def extract_chip(source_file, chip_geometry, chip_identifier, dest_folder):
     zz.to_netcdf(dest_file)
 
 
-def chop(tiles_file, tiles_folder, source_file, n_jobs=-1):
+def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1):
     print ("reading tiles", flush=True)
     tiles = gpd.read_file(tiles_file)
     print(f"chopping {len(tiles)} tiles according to {tiles_file}", flush=True)
     mParallel(n_jobs=n_jobs, verbose=30)\
         (delayed(extract_chip)\
-                (source_file, chip.geometry, chip.identifier, tiles_folder) \
+                (source_file, lat_field, lon_field, chip.geometry, chip.identifier, tiles_folder) \
                     for _ ,chip in tiles.iterrows())

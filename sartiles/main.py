@@ -60,6 +60,8 @@ def main():
     grid_parser.add_argument('--tiles_file', required=True, type=str, help="geopandas dataframe containing tiles, with 'geometry' and 'identifier' columns")
     grid_parser.add_argument('--tiles_folder', required=True, type=str, help='where to store the resulting tiles')
     grid_parser.add_argument('--source_file', required=True, type=str, help='the xarray readable file to chop')
+    grid_parser.add_argument('--lat_field', default='lat', type=str, help='field name of the latitude coordinate in source_file')
+    grid_parser.add_argument('--lon_field', default='lon', type=str, help='field name of the latitude coordinate in source_file')
     grid_parser.add_argument('--n_jobs', default=-1, type=int, help='number of parallel jobs (defaults to -1, using all CPUs)')
 
 
@@ -108,6 +110,8 @@ def main():
         chop.chop(tiles_file   = args.tiles_file,
                   tiles_folder = args.tiles_folder,
                   source_file  = args.source_file,
+                  lat_field    = args.lat_field,
+                  lon_field    = args.lon_field,
                   n_jobs       = args.n_jobs)        
 
         
