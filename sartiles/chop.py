@@ -60,6 +60,8 @@ def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1)
         raise ValueError("unknown source file format, must be tif or nc (netcdf)") 
 
     dest_crs = z.rio.crs
+    z.close()
+    print ("dest crs is", dest_crs)
 
     print(f"chopping {len(tiles)} tiles according to {tiles_file}", flush=True)
     mParallel(n_jobs=n_jobs, verbose=30)\
