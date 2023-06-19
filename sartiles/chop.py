@@ -5,6 +5,7 @@ import xarray as xr
 from rlxutils import mParallel
 from joblib import delayed
 import geopandas as gpd
+from pyproj import CRS
 
 def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifier, dest_folder):
     dest_file = f"{dest_folder}/{chip_identifier}.nc"
@@ -35,8 +36,16 @@ def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifi
 
 
 def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1):
+
+    epsg4326 = CRS.from_epsg(4326)
+    z = xr.open_dataset(source_file)    
     print ("reading tiles", flush=True)
     tiles = gpd.read_file(tiles_file)
+
+    if z.rio.crs != epsg4326:
+        print ("converting to crs 4326 from", z.rio.crs)
+        tiles = tiles.to_crs(epsg4326)
+
     print(f"chopping {len(tiles)} tiles according to {tiles_file}", flush=True)
     mParallel(n_jobs=n_jobs, verbose=30)\
         (delayed(extract_chip)\
