@@ -37,12 +37,11 @@ def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifi
 
 def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1):
 
-    epsg4326 = CRS.from_epsg(4326)
     z = xr.open_dataset(source_file)    
     print ("reading tiles", flush=True)
     tiles = gpd.read_file(tiles_file)
 
-    if z.rio.crs != tiles.crs:
+    if z.rio.crs is not None and z.rio.crs != tiles.crs:
         print ("converting tiles to", z.rio.crs)
         tiles = tiles.to_crs(z.rio.crs)
 
