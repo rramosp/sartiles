@@ -7,8 +7,8 @@ from joblib import delayed
 import geopandas as gpd
 from pyproj import CRS
 
-def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifier, dest_folder):
-    dest_file = f"{dest_folder}/{chip_identifier}.nc"
+def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifier, dest_folder, dest_format, dest_crs):
+    dest_file = f"{dest_folder}/{chip_identifier}.{dest_format}"
     if os.path.isfile(dest_file):
         return
     
@@ -32,7 +32,14 @@ def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifi
 
     sel_args = {lon_field: slice(*lon_range), lat_field: slice(*lat_range)}
     zz = z.sel(**sel_args).copy()  
-    zz.to_netcdf(dest_file)
+    if dest_format == 'nc':
+        zz.to_netcdf(dest_file)
+    elif dest_format == 'tif':
+        zz = zz.rio.write_crs(dest_crs)
+        zz['band_data'].rio.to_raster(dest_file)        
+    else:
+        raise ValueError("unknown source file format, must be tif or nc (netcdf)") 
+
 
 
 def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1):
@@ -45,8 +52,17 @@ def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1)
         print ("converting tiles to", z.rio.crs)
         tiles = tiles.to_crs(z.rio.crs)
 
+    if source_file.endswith(".tif") or source_file.endswith(".tiff"):
+        dest_format = 'tif'
+    elif source_file.endwith(".nc"):
+        dest_format = 'nc'
+    else:
+        raise ValueError("unknown source file format, must be tif or nc (netcdf)") 
+
+    dest_crs = z.rio.crs
+
     print(f"chopping {len(tiles)} tiles according to {tiles_file}", flush=True)
     mParallel(n_jobs=n_jobs, verbose=30)\
         (delayed(extract_chip)\
-                (source_file, lat_field, lon_field, chip.geometry, chip.identifier, tiles_folder) \
+                (source_file, lat_field, lon_field, chip.geometry, chip.identifier, tiles_folder, dest_format, dest_crs) \
                     for _ ,chip in tiles.iterrows())
