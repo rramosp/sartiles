@@ -77,5 +77,5 @@ def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1)
     print(f"chopping {len(tiles)} tiles according to {tiles_file}", flush=True)
     mParallel(n_jobs=n_jobs, verbose=30)\
         (delayed(extract_chip)\
-                (source_file, lat_field, lon_field, chip.geometry, chip.identifier, tiles_folder, dest_format, dest_crs) \
+                (source_file, lat_field, lon_field, chip.geometry, chip.identifier, tiles_folder, dest_format) \
                     for _ ,chip in tiles.iterrows())
