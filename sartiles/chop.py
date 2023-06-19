@@ -29,7 +29,8 @@ def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifi
     else:
         lon_range = (maxlon, minlon)
 
-    zz = z.sel(lon=slice(*lon_range), lat=slice(*lat_range)).copy()  
+    sel_args = {lon_field: slice(*lon_range), lat_field: slice(*lat_range)}
+    zz = z.sel(**sel_args).copy()  
     zz.to_netcdf(dest_file)
 
 
