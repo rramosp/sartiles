@@ -42,9 +42,9 @@ def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1)
     print ("reading tiles", flush=True)
     tiles = gpd.read_file(tiles_file)
 
-    if z.rio.crs != epsg4326:
-        print ("converting to crs 4326 from", z.rio.crs)
-        tiles = tiles.to_crs(epsg4326)
+    if z.rio.crs != tiles.crs:
+        print ("converting tiles to", z.rio.crs)
+        tiles = tiles.to_crs(z.rio.crs)
 
     print(f"chopping {len(tiles)} tiles according to {tiles_file}", flush=True)
     mParallel(n_jobs=n_jobs, verbose=30)\
