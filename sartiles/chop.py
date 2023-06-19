@@ -7,13 +7,8 @@ from joblib import delayed
 import geopandas as gpd
 from pyproj import CRS
 
-def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifier, dest_folder, dest_format, dest_crs):
-    dest_file = f"{dest_folder}/{chip_identifier}.{dest_format}"
-    if os.path.isfile(dest_file):
-        return
-    
-    z = xr.open_dataset(source_file)    
-    
+
+def extract_chip_from_xarray(z, lat_field, lon_field, chip_geometry):
     is_ascending = lambda x: x[-1]>x[0]        
 
     coords = np.r_[chip_geometry.boundary.coords]
@@ -32,15 +27,32 @@ def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifi
 
     sel_args = {lon_field: slice(*lon_range), lat_field: slice(*lat_range)}
     zz = z.sel(**sel_args).copy()  
+    return zz
+
+def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifier, dest_folder, dest_format):
+    dest_file = f"{dest_folder}/{chip_identifier}.{dest_format}"
+    
+    #if os.path.isfile(dest_file):
+    #    return
+    
+    z = xr.open_dataset(source_file)    
+    
+    zz = extract_chip_from_xarray(z, lat_field, lon_field, chip_geometry)    
+
+    # if crs is not 4326, reproject and extract again to ensure square cropping
+    epsg4326 = CRS.from_epsg(4326)
+    if zz.rio.crs != epsg4326:
+        chip_geometry = gpd.GeoDataFrame([], geometry=[chip_geometry], crs=zz.rio.crs).to_crs(epsg4326).geometry.values[0]
+        zz = zz.rio.reproject("EPSG:4326")
+        zz = extract_chip_from_xarray(zz, lat_field, lon_field, chip_geometry)    
+    
     if dest_format == 'nc':
         zz.to_netcdf(dest_file)
     elif dest_format == 'tif':
-        zz = zz.rio.write_crs(dest_crs)
+        zz = zz.rio.write_crs(epsg4326)
         zz['band_data'].rio.to_raster(dest_file)        
     else:
         raise ValueError("unknown source file format, must be tif or nc (netcdf)") 
-
-
 
 def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1):
 
@@ -61,7 +73,6 @@ def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1)
 
     dest_crs = z.rio.crs
     z.close()
-    print ("dest crs is", dest_crs)
 
     print(f"chopping {len(tiles)} tiles according to {tiles_file}", flush=True)
     mParallel(n_jobs=n_jobs, verbose=30)\
