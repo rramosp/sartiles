@@ -8,32 +8,34 @@ import geopandas as gpd
 from pyproj import CRS
 
 
-def extract_chip_from_xarray(z, lat_field, lon_field, chip_geometry):
-    is_ascending = lambda x: x[-1]>x[0]        
 
-    coords = np.r_[chip_geometry.boundary.coords]
-    minlon, minlat = coords.min(axis=0)
-    maxlon, maxlat = coords.max(axis=0)
-
-    if is_ascending(z[lat_field].values):
-        lat_range = (minlat, maxlat)
-    else:
-        lat_range = (maxlat, minlat)
-
-    if is_ascending(z[lon_field].values):
-        lon_range = (minlon, maxlon)
-    else:
-        lon_range = (maxlon, minlon)
-
-    sel_args = {lon_field: slice(*lon_range), lat_field: slice(*lat_range)}
-    zz = z.sel(**sel_args).copy()  
-    return zz
 
 def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifier, dest_folder, dest_format):
     dest_file = f"{dest_folder}/{chip_identifier}.{dest_format}"
-    
-    #if os.path.isfile(dest_file):
-    #    return
+
+    def extract_chip_from_xarray(z, lat_field, lon_field, chip_geometry):
+        is_ascending = lambda x: x[-1]>x[0]        
+
+        coords = np.r_[chip_geometry.boundary.coords]
+        minlon, minlat = coords.min(axis=0)
+        maxlon, maxlat = coords.max(axis=0)
+
+        if is_ascending(z[lat_field].values):
+            lat_range = (minlat, maxlat)
+        else:
+            lat_range = (maxlat, minlat)
+
+        if is_ascending(z[lon_field].values):
+            lon_range = (minlon, maxlon)
+        else:
+            lon_range = (maxlon, minlon)
+
+        sel_args = {lon_field: slice(*lon_range), lat_field: slice(*lat_range)}
+        zz = z.sel(**sel_args).copy()  
+        return zz
+
+    if os.path.isfile(dest_file):
+        return
     
     z = xr.open_dataset(source_file)    
     
@@ -71,7 +73,6 @@ def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1)
     else:
         raise ValueError("unknown source file format, must be tif or nc (netcdf)") 
 
-    dest_crs = z.rio.crs
     z.close()
 
     print(f"chopping {len(tiles)} tiles according to {tiles_file}", flush=True)
