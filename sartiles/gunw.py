@@ -470,9 +470,9 @@ def download_job( chip,
     # combine all patches
     try:
         rdata = xr.merge([p['data'] for p in patches])
-        rgeom = xr.merge([p['geom'] for p in patches])
-        rmeta = xr.merge([p['meta'] for p in patches])
-        rextra = xr.merge([p['extra'] for p in patches])
+        rgeom = xr.merge([p['geom'] for p in patches], compat='override')
+        rmeta = xr.merge([p['meta'] for p in patches], compat='override')
+        rextra = xr.merge([p['extra'] for p in patches], compat='override')
     except Exception as e:
         print ("\n\n\n--exception merging--")
         print (f"\nERROR ON tile {chip.identifier} ")
