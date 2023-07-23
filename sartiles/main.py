@@ -45,6 +45,7 @@ def main():
     grid_parser.add_argument('--granules_download_folder', required=True, type=str, help='where to download the granules from ASF before tiling them')
     grid_parser.add_argument('--year', required=True, type=int, help='year to query')
     grid_parser.add_argument('--month', required=True, type=int, help='month to query')
+    grid_parser.add_argument('--mode', default='most-frequent', type=str, help='month to query')
     grid_parser.add_argument('--no_retry', default=False, action='store_true', help='if set, skipped tiles in previous runs will not be retried')
     grid_parser.add_argument('--n_jobs', default=-1, type=int, help='number of parallel jobs (defaults to -1, using all CPUs)')
 
@@ -84,6 +85,7 @@ def main():
                        granules_download_folder = args.granules_download_folder,
                        year                     = args.year, 
                        month                    = args.month,
+                       mode                     = args.mode,
                        n_jobs                   = args.n_jobs,
                        no_retry                 = args.no_retry
                       )

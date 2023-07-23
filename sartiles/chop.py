@@ -43,7 +43,7 @@ def extract_chip(source_file, lat_field, lon_field, chip_geometry, chip_identifi
 
     # if crs is not 4326, reproject and extract again to ensure square cropping
     epsg4326 = CRS.from_epsg(4326)
-    if zz.rio.crs != epsg4326:
+    if zz.rio.crs is not None and zz.rio.crs != epsg4326:
         chip_geometry = gpd.GeoDataFrame([], geometry=[chip_geometry], crs=zz.rio.crs).to_crs(epsg4326).geometry.values[0]
         zz = zz.rio.reproject("EPSG:4326")
         zzz = extract_chip_from_xarray(zz, lat_field, lon_field, chip_geometry)    
@@ -74,7 +74,7 @@ def chop(tiles_file, tiles_folder, source_file, lat_field, lon_field, n_jobs=-1)
 
     if source_file.endswith(".tif") or source_file.endswith(".tiff"):
         dest_format = 'tif'
-    elif source_file.endwith(".nc"):
+    elif source_file.endswith(".nc"):
         dest_format = 'nc'
     else:
         raise ValueError("unknown source file format, must be tif or nc (netcdf)") 

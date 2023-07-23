@@ -151,6 +151,10 @@ def select_starttime_most_frequent_any_direction(zz):
         tile_granules = select_starttime_most_frequent(zz, direction='desc')
     return tile_granules
 
+
+def select_deltadays_lte_48(zz):
+    return zz[zz['Days in Pair']<=48]
+
 def get_delta_days(date_pair):
     d0 = datetime.strptime(date_pair.split("_")[0], "%Y%m%d")
     d1 = datetime.strptime(date_pair.split("_")[1], "%Y%m%d")
@@ -308,6 +312,7 @@ def download( tiles_file,
                     granules_download_folder, 
                     year, 
                     month, 
+                    mode='most-frequent',
                     username=None, 
                     password=None,
                     no_retry = False,
@@ -315,6 +320,10 @@ def download( tiles_file,
                     g = None,
                     global_asf_query_result = None
                     ):
+    
+    if not mode in ['most-frequent', 'lte48']:
+        raise ValueError("mode must be one of 'most-frequent', 'lte48'")
+
     if username is None:
 
         cfgfile = f"{os.environ['HOME']}/.asf.cfg" 
@@ -361,10 +370,12 @@ def download( tiles_file,
                         tiles_folder             = tiles_folder, 
                         granules_download_folder = granules_download_folder, 
                         global_asf_query_result  = global_asf_query_result,
+                        mode                     = mode,
                         username                 = username, 
                         password                 = password,
                         no_retry                 = no_retry)
-                     for _,chip in g.sample(len(g)).iterrows()
+                     for _,chip in g.iterrows()
+#                     for _,chip in g.sample(len(g)).iterrows()
             ) 
 
     
@@ -375,6 +386,7 @@ def download_job( chip,
                         global_asf_query_result,
                         username, 
                         password, 
+                        mode='most-frequent',
                         no_retry = False):
 
     z = global_asf_query_result
@@ -407,7 +419,10 @@ def download_job( chip,
     
     while (len(zz)>0):
 
-        tile_granules = select_starttime_most_frequent_any_direction(zz)
+        if mode=='most-frequent':
+            tile_granules = select_starttime_most_frequent_any_direction(zz)
+        else:
+            tile_granules = select_deltadays_lte_48(zz)
 
         # if not found skip it
         if tile_granules is None or len(tile_granules)==0:
