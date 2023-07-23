@@ -374,11 +374,8 @@ def download( tiles_file,
                         username                 = username, 
                         password                 = password,
                         no_retry                 = no_retry)
-                     for _,chip in g.iterrows()
-#                     for _,chip in g.sample(len(g)).iterrows()
+                     for _,chip in g.sample(len(g)).iterrows()
             ) 
-
-    
 
 def download_job( chip, 
                         tiles_folder, 
@@ -467,12 +464,18 @@ def download_job( chip,
         touch(skipped_file, 'TILE_NOT_FULLY_CONTAINED_IN_ANY_GRANULE')
         return
 
+    
+    # set lon/lat to be the same as patch 0 
+    for p in patches[1:]:
+        p['data']['latitude'] = patches[0]['data'].latitude
+        p['data']['longitude'] = patches[0]['data'].longitude
+    
     # combine all patches
     try:
         rdata = xr.merge([p['data'] for p in patches])
-        rgeom = xr.merge([p['geom'] for p in patches], compat='override')
-        rmeta = xr.merge([p['meta'] for p in patches], compat='override')
-        rextra = xr.merge([p['extra'] for p in patches], compat='override')
+        rgeom = xr.concat([p['geom'] for p in patches], dim='datepair')
+        rmeta = xr.concat([p['meta'] for p in patches], dim='datepair')
+        rextra = xr.concat([p['extra'] for p in patches], dim='datepair')
     except Exception as e:
         print ("\n\n\n--exception merging--")
         print (f"\nERROR ON tile {chip.identifier} ")
@@ -484,7 +487,8 @@ def download_job( chip,
     rgeom['crs'] = patches[0]['data'].crs[0]
     rmeta['crs'] = patches[0]['data'].crs[0]
     rextra['crs'] = patches[0]['data'].crs[0]
-
+    rgeom['crsMeta'] = rgeom['crsMeta'].astype(np.float32)
+    
     rdata.to_netcdf(dest_file, mode='w', group='/science/grids/data')
     rgeom.to_netcdf(dest_file, mode='a', group='/science/grids/imagingGeometry')
     rmeta.to_netcdf(dest_file, mode='a', group='/science/radarMetaData')
