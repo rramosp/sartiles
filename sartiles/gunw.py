@@ -377,6 +377,8 @@ def download( tiles_file,
                      for _,chip in g.sample(len(g)).iterrows()
             ) 
 
+    
+
 def download_job( chip, 
                         tiles_folder, 
                         granules_download_folder, 
@@ -385,7 +387,7 @@ def download_job( chip,
                         password, 
                         mode='most-frequent',
                         no_retry = False):
-
+    
     z = global_asf_query_result
     retry_skipped = not no_retry
 
@@ -415,7 +417,7 @@ def download_job( chip,
     patches = []
     
     while (len(zz)>0):
-
+        
         if mode=='most-frequent':
             tile_granules = select_starttime_most_frequent_any_direction(zz)
         else:
@@ -454,7 +456,12 @@ def download_job( chip,
                         
         if len(patches)==0:
             # if tile is not contained in any selected granule, continue looking
+            lenzz_before = len(zz)
             zz = zz[~zz['Granule Name'].isin(tile_granules['Granule Name'])]
+            lenzz_after = len(zz)
+            # if nothing happened, simply skip
+            if lenzz_before == lenzz_after:
+                break
         else:
             # retrict the list of granules to the ones actually used
             tile_granules = tile_granules[tile_granules.URL.isin(urls_used)]
@@ -464,6 +471,12 @@ def download_job( chip,
         touch(skipped_file, 'TILE_NOT_FULLY_CONTAINED_IN_ANY_GRANULE')
         return
 
+    # ensure all patches have the same dim
+    min_latdim = np.min([p['data'].latitude.shape[0] for p in patches])
+    min_londim = np.min([p['data'].longitude.shape[0] for p in patches])    
+    
+    for p in patches:
+        p['data'] = p['data'].sel({'latitude': p['data'].latitude.values[:min_latdim], 'longitude': p['data'].longitude.values[:min_londim]}) 
     
     # set lon/lat to be the same as patch 0 
     for p in patches[1:]:
@@ -472,7 +485,7 @@ def download_job( chip,
     
     # combine all patches
     try:
-        rdata = xr.merge([p['data'] for p in patches])
+        rdata = xr.concat([p['data'] for p in patches], dim='datepair')
         rgeom = xr.concat([p['geom'] for p in patches], dim='datepair')
         rmeta = xr.concat([p['meta'] for p in patches], dim='datepair')
         rextra = xr.concat([p['extra'] for p in patches], dim='datepair')
@@ -505,5 +518,3 @@ def download_job( chip,
         p['meta'].close()
         p['extra'].close()
     return
-
-
