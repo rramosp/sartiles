@@ -33,7 +33,7 @@ def gethash(s):
     k = str(hex(k))[2:].zfill(13)
     return k
 
-def query_asfgunw(geom, year, month, username, password, debug=False):
+def query_asfgunw(geom, start_date, end_date, username, password, debug=False):
     
     """
     queries asf gunw collection for all the pairs whose end date is within year/month, containing the given geometry
@@ -47,10 +47,6 @@ def query_asfgunw(geom, year, month, username, password, debug=False):
     
     asf_baseurl='https://api.daac.asf.alaska.edu/services/search/param?'
 
-    lastday_in_month = calendar.monthrange(year, month)[1]
-    start_date = f"{year:4d}-{month:02d}-01"
-    end_date   = f"{year:4d}-{month:02d}-{lastday_in_month:02d}"
-    
     p = geom.wkt
 
     attempts = 1
@@ -310,9 +306,9 @@ def download_granules(tile_granules, granules_download_folder, username, passwor
 def download( tiles_file, 
                     tiles_folder, 
                     granules_download_folder, 
-                    year, 
-                    month, 
-                    mode='most-frequent',
+                    start_date, 
+                    end_date, 
+                    mode='lte48',
                     username=None, 
                     password=None,
                     no_retry = False,
@@ -320,6 +316,16 @@ def download( tiles_file,
                     g = None,
                     global_asf_query_result = None
                     ):
+
+    try:
+        d1 = datetime.strptime(start_date, '%Y-%m-%d')
+        d2 = datetime.strptime(end_date, '%Y-%m-%d')
+    except:
+        raise ValueError(f"incorrect date {start_date} or {end_date}")
+
+
+    if (d2-d1).days < 0:
+        raise ValueError(f"start date {start_date} must be after end date {end_date}")
     
     if not mode in ['most-frequent', 'lte48']:
         raise ValueError("mode must be one of 'most-frequent', 'lte48'")
@@ -351,8 +357,8 @@ def download( tiles_file,
 
         print ("making query to ASF GUNW", flush=True)
         global_asf_query_result = query_asfgunw(ch.simplify(tolerance=.5), 
-                                                year=year, 
-                                                month=month, 
+                                                start_date=start_date, 
+                                                end_date=end_date, 
                                                 username=username, 
                                                 password=password )
         
