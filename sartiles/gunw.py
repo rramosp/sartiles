@@ -402,7 +402,7 @@ def download_job( chip,
     skipped_file = f"{tiles_folder}/{chip.identifier}.skipped"
     # if already processed, skip
     #print ("dest file", dest_file)
-    if os.path.isfile(dest_file):
+    if os.path.isfile(dest_file) or os.path.isfile(skipped_file):
         return
         
     # if attempted but failed, retry if requested in case
