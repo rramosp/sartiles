@@ -24,6 +24,7 @@ import requests
 import csv
 from bs4 import BeautifulSoup
 import configparser
+from joblib import Parallel
 
 def gethash(s):
     """
@@ -64,6 +65,7 @@ def query_asfgunw(geom, start_date, end_date, username, password, debug=False):
 
         arg_str='&'.join('%s=%s'%(k,v) for k,v in conf.items())
         argurl=asf_baseurl + arg_str
+        print (f"query is {argurl}")
         r=requests.post(argurl)
 
         if r.status_code != 200:
@@ -280,7 +282,7 @@ class GUNWGranule:
         # add other metadata
         patch_extra = xr.Dataset(
             data_vars=dict(
-                deltadays=np.array([self.delta_days], dtype='uint8'),
+                deltadays=np.array([self.delta_days], dtype='uint16'),
                 direction=(["datepair"], [self.direction])
             ),
             coords=dict(
@@ -370,7 +372,7 @@ def download( tiles_file,
 
     print (f"downloading {len(g)} tiles", flush=True)
     
-    mParallel(n_jobs=n_jobs, verbose=30)(
+    Parallel(n_jobs=n_jobs, verbose=30)(
                     delayed(download_job)( 
                         chip                     = chip, 
                         tiles_folder             = tiles_folder, 
@@ -436,8 +438,8 @@ def download_job( chip,
         # download granules
         try:
             granules = download_granules(tile_granules, granules_download_folder, username, password)
-        except:
-            touch(skipped_file, 'COULD_NOT_DOWNLOAD')
+        except Exception as e:
+            touch(skipped_file, f'COULD_NOT_DOWNLOAD {e}')
             return
 
         # retrieve  patches from all granules 
